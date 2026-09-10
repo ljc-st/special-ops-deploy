@@ -1,0 +1,43 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: special-ops-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-agent-memory-2026}"
+      MYSQL_DATABASE: "${MEMORY_DATABASE:-agent_memory}"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    # 不对外暴露端口，仅智能体容器内网访问
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-agent-memory-2026}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  agent-backend:
+    build: ./agent-backend
+    container_name: special-ops-agent
+    environment:
+      LLM_MODE: "openai"
+      LLM_BASE_URL: "${LLM_BASE_URL}"
+      LLM_API_KEY: "${LLM_API_KEY}"
+      LLM_MODEL: "${LLM_MODEL}"
+      AUTH_ENABLED: "true"
+      AUTH_API_KEYS: "${AUTH_API_KEYS}"
+      MEMORY_BACKEND: "mysql"
+      MEMORY_HOST: "mysql"
+      MEMORY_PORT: "3306"
+      MEMORY_USER: "root"
+      MEMORY_PASSWORD: "${MYSQL_ROOT_PASSWORD:-agent-memory-2026}"
+      MEMORY_DATABASE: "${MEMORY_DATABASE:-agent_memory}"
+      JAVA_BACKEND_URL: "${JAVA_BACKEND_URL}"
+    ports:
+      - "8082:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql-data:

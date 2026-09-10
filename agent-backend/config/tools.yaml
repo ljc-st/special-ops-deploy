@@ -1,0 +1,197 @@
+# 工具注册表：Java 接口以"工具"为单位配置化接入（docs/agent-design.md §5）。
+# 新增接口 = 新增一条配置，无需改代码。
+#
+# executor_type:
+#   mock - 本地模拟返回（联调/测试，不调用真实接口）
+#   http - 真实 HTTP 调用（接入 Java 接口时使用）
+#
+# auth_mode:
+#   inherit - 透传前端用户 token（Authorization: Bearer）
+#   token   - 服务间静态令牌（header X-Internal-Token，值从环境变量 ${INTERNAL_TOKEN} 注入）
+#   sign    - 预留：时间戳+签名
+tools:
+  # ==================== special 模块组合技能工具（固定行动序列，覆盖高频场景）====================
+  - name: special_score_overview
+    description: 查询特殊作业模块的评分总览（总分、三维度得分、是否通过）；当用户询问"特殊作业评分怎么样、得了几分、是否合格"时优先使用本工具。用户明确询问单个评分项或报备/作业票/抽查功能建设时不要使用本工具
+    executor_type: skill
+    skill_name: special_score_overview
+    parameters: {}
+
+  - name: special_report_function_build
+    description: 现场评估特殊作业报备功能建设评分项 1.1（近N月有报备数据），返回本次 Java 评分接口的状态、数据量和原因；当用户询问"特殊作业报备功能建设情况"、"报备功能建设"、"1.1"或"近N月有报备数据"时必须使用本工具，不要调用评分总览；带有应用活跃度/近N天有更新时不要使用
+    executor_type: skill
+    skill_name: special_report_function_build
+    parameters: {}
+
+  - name: special_ticket_function_build
+    description: 现场评估特殊作业票管理功能建设评分项 1.2（近N月有作业票数据），返回本次 Java 评分接口的状态、数据量和原因；当用户询问"特殊作业票管理功能建设情况评估"、"作业票管理功能建设"、"1.2"或"近N月有作业票数据"时必须使用本工具，不要调用评分总览；带有应用活跃度/近N天有更新时不要使用
+    executor_type: skill
+    skill_name: special_ticket_function_build
+    parameters: {}
+
+  - name: special_inspection_function_build
+    description: 现场评估特殊作业抽查功能建设评分项 1.3（近N月有抽查数据），返回本次 Java 评分接口的状态、数据量和原因；当用户询问"特殊作业抽查功能建设情况"、"抽查功能建设"、"1.3"或"近N月有抽查数据"时必须使用本工具，不要调用评分总览；带有应用活跃度/近N天有更新时不要使用
+    executor_type: skill
+    skill_name: special_inspection_function_build
+    parameters: {}
+
+  - name: special_data_quality_evaluation
+    description: 现场评估特殊作业模块数据质量维度（2.x），先读取 Java 返回的维度评分项，再逐项实时试算并返回编号、实得分/满分、状态、原因和关键事实；不传 itemNo 时返回整个数据质量维度，传 itemNo 时只返回该评分项；当用户询问数据质量、数据完整性、接入率、重复率或明确提到 2.x 时必须使用，不要只返回总览
+    executor_type: skill
+    skill_name: special_data_quality_evaluation
+    parameters:
+      itemNo:
+        type: string
+        required: false
+        description: 明确询问单个数据质量评分项时传入编号（如 2.1、2.3）；询问整个数据质量维度时不传
+
+  - name: special_application_effect_evaluation
+    description: 现场评估特殊作业模块应用成效维度（3.x），先读取 Java 返回的维度评分项，再逐项实时试算并返回编号、实得分/满分、状态、原因和问题实体；不传 itemNo 时返回整个应用成效维度，传 itemNo 时只返回该评分项；当用户询问应用成效、应用效果、实际使用、关联作业或明确提到 3.x 时必须使用，不要只返回总览；报备有效性对应 3.1，作业票有效性对应 3.2，抽查功能应用活跃度对应 3.5
+    executor_type: skill
+    skill_name: special_application_effect_evaluation
+    parameters:
+      itemNo:
+        type: string
+        required: false
+        description: 明确询问单个应用成效评分项时传入编号（如 3.5、3.14）；询问整个应用成效维度时不传
+
+  - name: special_score_drilldown
+    description: 分析特殊作业模块的扣分项及原因（自动逐项查询扣分原因并汇总）；当用户询问"特殊作业哪些项扣分了、为什么扣分、扣分原因"时优先使用本工具
+    executor_type: skill
+    skill_name: special_score_drilldown
+    parameters:
+      itemNo:
+        type: string
+        required: false
+        description: 限定分析某个评分项编号（如 2.3、3.5.1）；不传则分析全部扣分项
+      dimension:
+        type: string
+        required: false
+        enum: [functionBuild, dataQuality, applicationEffect]
+        description: 限定维度；不传则分析全部维度
+
+  - name: special_ticket_issue
+    description: 查询特殊作业应用问题扣分涉及的具体问题作业票（票号、企业、原因）；当用户询问"哪张作业票有问题、应用问题扣分明细、作业票评判不通过"时优先使用本工具
+    executor_type: skill
+    skill_name: special_ticket_issue
+    parameters:
+      itemNo:
+        type: string
+        required: false
+        description: 应用问题子项编号（如 3.5.1）；不传则自动分析所有 3.5.x 子项
+
+  # ==================== 系统评分接口（真实 Java 服务，见 docs/agent-design.md §5 与接口规范）====================
+  - name: score_list_parks
+    description: 查询数据库中有效园区列表（园区 ID、名称和编码）；仅在用户选择所有园区时调用，不能用猜测的园区 ID 替代
+    executor_type: http
+    http:
+      method: GET
+      url: "{{ java_backend_url }}/systemScore/parks"
+      headers:
+        "Accept": "application/json"
+      timeout_seconds: 15
+      retry: { max_attempts: 2, backoff: fixed, interval_ms: 200 }
+      success_codes: [200]
+      response_path: "$"
+      observation_template: "有效园区 {{ data|length }} 个"
+      truncate_chars: 1000
+    parameters: {}
+    auth_mode: none
+
+  - name: score_evaluate_detail
+    description: 实时计算指定模块（或全部模块）的完整评分明细，返回各模块/维度/评分项的得分、是否通过、扣分项及原因；当用户询问"评分情况、得了多少分、是否合格、哪些项扣分"时调用。单个评分项查询应使用 score_calculate
+    executor_type: http
+    http:
+      method: POST
+      url: "{{ java_backend_url }}/systemScore/evaluate/detail"
+      headers:
+        "Content-Type": "application/json"
+      body_template: |
+        {"modules": [{% if module %}"{{ module }}"{% endif %}]{% if inputs.get('parkId') %},"parkId":"{{ inputs.get('parkId') }}"{% endif %}}
+      timeout_seconds: 30
+      retry: { max_attempts: 2, backoff: fixed, interval_ms: 200 }
+      success_codes: [200]
+      response_path: "$"
+      observation_template: |
+        {% if modules %}总分 {{ score }}/{{ maxScore }}，{{ '通过' if passed else '未通过' }}，共 {{ modules|length }} 个模块：{% for m in modules %}{{ m.moduleName }} {{ m.score }}/{{ m.maxScore }}分{% if m.dimensions %}{% for d in m.dimensions %}{{ d.dimensionName }} {{ d.score }}/{{ d.maxScore }}分{% if d.items %}{% for it in d.items %}{% if it.status != 'PASS' %}[扣分]{{ it.itemNo }} {{ it.itemName }} 得{{ it.score }}/{{ it.maxScore }}{% if it.detailText %}：{{ it.detailText }}{% endif %}{% endif %}{% endfor %}{% endif %}{% endfor %}{% endif %}{% endfor %}{% else %}接口未返回模块明细{% endif %}
+      truncate_chars: 2500
+    parameters:
+      module:
+        type: string
+        required: false
+        enum: [special, closed, major, dual, safety, emergency, operation]
+        description: 模块编码；不传或传空则计算全部模块（特殊作业/封闭化管理/重大危险源/双重预防/安全基础管理/敏捷应急/运维保障）
+    auth_mode: none
+
+  - name: score_calculate
+    description: 实时试算单个评分项，返回该评分项的得分状态、异常原因、命中的实体与指标；当用户询问"某个评分项为什么扣分/没得分、试算某项"时调用
+    executor_type: http
+    http:
+      method: POST
+      url: "{{ java_backend_url }}/systemScore/calculate"
+      headers:
+        "Content-Type": "application/json"
+      body_template: |
+        {"items":[{"module":"{{ module }}","dimension":"{{ dimension }}","itemNo":"{{ itemNo }}"}]{% if inputs.get('parkId') %},"parkId":"{{ inputs.get('parkId') }}"{% endif %}}
+      timeout_seconds: 30
+      retry: { max_attempts: 2, backoff: fixed, interval_ms: 200 }
+      success_codes: [200]
+      response_path: "$[0]"
+      observation_template: |
+        评分项 {{ itemNo }} {{ itemName }}：状态 {{ status }}；原因：{{ detailText }}{% if entities|length > 0 %}；命中 {{ entities|length }} 个实体：{% for e in entities %}{{ e.entityName }}({{ e.entityId }}){% if not loop.last %}、{% endif %}{% endfor %}{% endif %}
+      truncate_chars: 4000
+    parameters:
+      module:
+        type: string
+        required: true
+        enum: [special, closed, major, dual, safety, emergency, operation]
+        description: 模块编码
+      dimension:
+        type: string
+        required: true
+        enum: [functionBuild, dataQuality, applicationEffect, dutyShift, dailyOperation, systemCompliance]
+        description: 维度；通用模块用 functionBuild/dataQuality/applicationEffect，operation 模块也可传实际值 dutyShift/dailyOperation/systemCompliance
+      itemNo:
+        type: string
+        required: true
+        description: 评分项编号，新格式为字符串编码（如 special-functionBuild-tszybbgnjsqkpg），旧格式为数字编号（如 1.1、2.3、3.5.1）
+    auth_mode: none
+
+  # ==================== 本地联调示例（executor_type: mock 不调用真实接口）====================
+  - name: query_user_order
+    description: 查询指定用户的订单列表，返回订单编号、金额、状态、下单时间；当用户询问"我的订单/买了什么"时调用
+    executor_type: mock
+    mock_response: 共查到 3 笔订单：1) 订单号 A2024001，金额 199.00 元，状态 已发货；2) 订单号 A2024002，金额 89.50 元，状态 待支付；3) 订单号 A2024003，金额 399.00 元，状态 已完成
+    parameters:
+      userId: { type: string, required: true, description: 用户ID }
+      status: { type: string, required: false, enum: [PENDING, PAID, SHIPPED, DONE, CANCELED], description: 订单状态筛选 }
+
+  - name: query_user_balance
+    description: 查询指定用户的账户余额，返回余额金额；当用户询问"余额/账户里有多少钱"时调用
+    executor_type: mock
+    mock_response: 用户当前账户余额为 128.60 元
+    parameters:
+      userId: { type: string, required: true, description: 用户ID }
+
+  # ---- 真实 Java 接口示例（接入时把 executor_type 改为 http 并填写真实 url/参数/响应结构）----
+  - name: create_refund_request
+    description: 为用户发起退款申请，返回退款单号；仅在用户明确要求退款/退货时调用，调用前必须先与用户确认订单号
+    executor_type: http
+    http:
+      method: POST
+      url: http://java-backend:8080/api/refund/apply
+      headers:
+        "Content-Type": "application/json"
+        "X-Internal-Token": "${INTERNAL_TOKEN}"
+      body_template: |
+        {"orderNo": "{{orderNo}}", "reason": "{{reason}}", "operator": "{{user_id}}", "requestId": "{{request_id}}"}
+      timeout_seconds: 15
+      retry: { max_attempts: 2, backoff: fixed, interval_ms: 200 }
+      success_codes: [200]
+      response_path: "$.data"
+      observation_template: 退款申请结果：{{message}}，退款单号 {{refundNo}}
+      truncate_chars: 2000
+    parameters:
+      orderNo: { type: string, required: true, description: 订单编号 }
+      reason: { type: string, required: false, description: 退款原因 }
+    auth_mode: token
