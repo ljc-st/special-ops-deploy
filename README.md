@@ -1,126 +1,273 @@
-# 特殊作业评分智能体 · Docker 部署包（仅智能体）
+# 特殊作业评分智能体
 
-Java 评分后端已在服务器 8081 端口部署好，本包**只部署智能体**，并**内置一个 MySQL 容器**存会话记忆，无需额外数据库配置。
+基于 LangGraph 的智能评分对话系统，专注于特殊作业模块的评分查询与分析。
 
-| 服务 | 端口 | 说明 |
-|---|---|---|
-| `agent-backend` | 8082（对外） | FastAPI + LangGraph 智能体，Dify 兼容接口，调用大模型 + Java 评分后端 |
-| `mysql` | 不对外 | 内置 MySQL，只存智能体会话记忆（`agent_memory`） |
+## 项目特点
 
-前端访问 `http://<服务器IP>:8082/v1/chat-messages`，鉴权用 Bearer Key。
+- ✅ **Dify 兼容接口**: 支持 streaming 和 blocking 两种响应模式
+- ✅ **智能技能编排**: 高频场景预定义为组合技能，提升响应效率
+- ✅ **统一接口规范**: 适配最新的评分接口规范 v3
+- ✅ **会话记忆**: MySQL 持久化存储，支持多轮对话上下文
+- ✅ **Docker 部署**: 一键启动，内置 MySQL，无需额外配置
 
----
-
-## 一、前置条件
-
-1. 服务器已装 **Docker** 和 **Docker Compose v2**。
-2. **Java 评分后端已在本机 8081 端口运行**（本包不包含、不部署 Java）。
-3. 其余（MySQL、大模型、鉴权）都在包里配好了默认值，基本开箱即用。
-
----
-
-## 二、部署步骤
-
-### 1. 配置环境变量（通常只需改一个）
+## 快速开始
 
 ```bash
-cd special-ops-deploy
+# 1. 配置环境变量
 cp .env.example .env
-vim .env
-```
+vim .env  # 修改 JAVA_BACKEND_URL 等配置
 
-`.env` 关键项（其余都有默认值，可不改）：
-
-| 变量 | 说明 |
-|---|---|
-| `JAVA_BACKEND_URL` | Java 评分后端地址。默认 `http://172.17.0.1:8081`（Docker 网桥网关，指向宿主机）；不通就改 `docker network inspect bridge` 查到的网关 IP 或服务器内网 IP |
-| `MYSQL_ROOT_PASSWORD` | 内置 MySQL 的密码，已给默认值，一般不用改 |
-| `LLM_API_KEY` / `LLM_MODEL` | 阿里云百炼大模型（默认已填好） |
-| `AUTH_API_KEYS` | 前端鉴权 Bearer Key（默认已填好） |
-
-> 内置 MySQL 只存智能体会话记忆，和服务器上已有的 MySQL、Java 的业务库 `admin_new` 完全无关、互不影响。
-
-### 2. 启动
-
-```bash
+# 2. 启动服务
 docker compose up -d --build
-```
 
-首次启动会拉取 `mysql:8.0` 和 `python:3.13-slim` 镜像，需稍等。
-
-### 3. 验证
-
-```bash
-# 健康检查
+# 3. 验证部署
 curl http://127.0.0.1:8082/health
-# 期望：{"status":"ok"}
 
-# 带鉴权对话（blocking）
+# 4. 测试对话
 curl -X POST http://127.0.0.1:8082/v1/chat-messages \
   -H "Authorization: Bearer app-50b15bd5240cf16958ab7f6e7d194e1f" \
   -H "Content-Type: application/json" \
   -d '{"query":"特殊作业评分总览","response_mode":"blocking","user":"u_10001"}'
 ```
 
----
+## 项目结构
 
-## 三、前端接入
+```
+special-ops-deploy/
+├── docker-compose.yml          # 服务编排配置
+├── .env.example                # 环境变量模板
+├── README.md                   # 项目说明
+├── DEPLOY.md                   # 详细部署指南
+├── CHANGELOG.md                # 更新日志
+└── agent-backend/              # 智能体后端
+    ├── app/                    # 应用代码
+    │   ├── api/                # API 路由层
+    │   ├── graph/              # LangGraph 图逻辑
+    │   ├── llm/                # 大模型客户端
+    │   ├── tools/              # 工具和技能实现
+    │   └── sse/                # SSE 流式响应
+    └── config/                 # 配置文件
+        ├── tools.yaml          # 工具注册表
+        └── settings.yaml       # 应用设置
+```
 
-- 地址：`http://<服务器IP>:8082`
-- 接口：`POST /v1/chat-messages`
-- 鉴权头：`Authorization: Bearer <AUTH_API_KEYS 里的 key>`
-- 请求体（Dify 标准格式）：
+## 技术架构
 
+### 核心技术栈
+
+- **FastAPI**: 高性能异步 Web 框架
+- **LangGraph**: AI Agent 编排引擎
+- **阿里云百炼**: 大语言模型（OpenAI 兼容）
+- **MySQL 8.0**: 会话记忆存储
+- **Docker**: 容器化部署
+
+### 架构设计
+
+```
+┌─────────┐     ┌──────────────┐     ┌─────────────┐
+│  前端   │────▶│ Agent Backend│────▶│Java Backend │
+│         │     │   (8082)     │     │   (8081)    │
+└─────────┘     └──────┬───────┘     └─────────────┘
+                       │
+                       ▼
+                 ┌──────────┐
+                 │  MySQL   │
+                 │ (内网)   │
+                 └──────────┘
+```
+
+### 评分技能
+
+系统提供 8 个预定义技能，覆盖高频查询场景：
+
+1. **special_score_overview**: 评分总览（总分/维度/通过状态）
+2. **special_report_function_build**: 报备功能建设评估
+3. **special_ticket_function_build**: 作业票功能建设评估
+4. **special_inspection_function_build**: 抽查功能建设评估
+5. **special_data_quality_evaluation**: 数据质量维度评估
+6. **special_application_effect_evaluation**: 应用成效维度评估
+7. **special_score_drilldown**: 扣分项分析
+8. **special_ticket_issue**: 问题票据查询
+
+## 接口规范
+
+当前版本适配 **系统评分接口规范 v3**：
+
+### 评分项编号
+
+- **新格式**: `special-functionBuild-tszybbgnjsqkpg`（字符串编码）
+- **旧格式**: `1.1`, `2.3`, `3.5`（数字编号，兼容）
+
+### 统一状态
+
+| 状态 | 说明 |
+|------|------|
+| `PASS` | 通过 |
+| `BUSINESS_ISSUE` | 业务问题 |
+| `DATA_INSUFFICIENT` | 数据不足 |
+| `CALCULATION_ERROR` | 计算异常 |
+
+### 关键字段
+
+- `itemNo`: 评分项编号
+- `detailText`: 详情文本
+- `status`: 统一状态
+- `dimensionCode/dimensionName`: 维度编码/名称
+- `moduleCode/moduleName`: 模块编码/名称
+
+## 配置说明
+
+### 必需配置
+
+| 环境变量 | 说明 | 示例 |
+|---------|------|------|
+| `JAVA_BACKEND_URL` | Java 评分后端地址 | `http://172.17.0.1:8081` |
+| `LLM_API_KEY` | 大模型 API Key | `sk-xxx` |
+| `AUTH_API_KEYS` | 前端鉴权 Keys | `["app-xxx"]` |
+
+### 可选配置
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `LLM_MODEL` | 模型名称 | `qwen3-vl-235b-a22b-instruct` |
+| `MYSQL_ROOT_PASSWORD` | MySQL 密码 | `agent-memory-2026` |
+| `MEMORY_DATABASE` | 数据库名 | `agent_memory` |
+
+详细配置说明见 [DEPLOY.md](DEPLOY.md)
+
+## API 文档
+
+### 对话接口
+
+**POST** `/v1/chat-messages`
+
+**请求头**:
+```
+Authorization: Bearer <AUTH_API_KEY>
+Content-Type: application/json
+```
+
+**请求体**:
 ```json
 {
   "query": "特殊作业评分总览",
-  "inputs": {},
-  "response_mode": "streaming",
-  "conversation_id": "",
+  "response_mode": "streaming",  // 或 "blocking"
+  "conversation_id": "",         // 可选
   "user": "u_10001"
 }
 ```
 
-响应为标准 Dify SSE / blocking 格式（`message` / `message_end` / `error` / `ping`）。
+**响应**: 
+- Streaming: SSE 事件流
+- Blocking: JSON 对象
 
----
+详细 API 文档见 [DEPLOY.md](DEPLOY.md#前端接入)
 
-## 四、常见问题
+## 开发指南
 
-1. **智能体调不到 Java（回答显示"评分数据服务暂时不可用"）**
-   先确认宿主机 8081 上 Java 正常：`curl -X POST http://127.0.0.1:8081/systemScore/evaluate/detail -H "Content-Type: application/json" -d '{"modules":["special"]}'`。
-   若宿主机通、容器不通，则是网关地址不对：运行 `docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'` 拿到网关 IP，把 `.env` 的 `JAVA_BACKEND_URL` 改成 `http://<网关IP>:8081`，再 `docker compose up -d`。
+### 本地开发
 
-2. **会话记忆数据会丢吗？**
-   不会。内置 MySQL 数据挂在 `mysql-data` 卷上，`docker compose down` 不丢数据；只有 `docker compose down -v` 才会清空。
+```bash
+# 安装依赖
+cd agent-backend
+pip install -e .
 
-3. **大模型调用报错**
-   确认 `LLM_API_KEY` 有效，且百炼已开通 `qwen3-vl-235b-a22b-instruct`。
+# 配置环境变量
+export JAVA_BACKEND_URL=http://localhost:8081
+export LLM_API_KEY=your_key
+export AUTH_API_KEYS='["app-test"]'
 
-4. **改配置后生效**
-   ```bash
-   docker compose up -d --build
-   ```
-
-5. **查看日志**
-   ```bash
-   docker compose logs -f agent-backend
-   docker compose logs -f mysql
-   ```
-
----
-
-## 五、目录结构
-
+# 启动服务
+uvicorn app.main:app --reload --port 8000
 ```
-special-ops-deploy/
-├── docker-compose.yml
-├── .env.example
-├── README.md
-└── agent-backend/
-    ├── Dockerfile
-    ├── .dockerignore
-    ├── pyproject.toml
-    ├── app/
-    └── config/
+
+### 添加新技能
+
+1. 在 `app/tools/skills.py` 中实现技能函数
+2. 在 `SKILLS` 字典中注册
+3. 在 `config/tools.yaml` 中添加工具配置
+4. 在 `app/graph/prompts.py` 中更新提示词
+
+### 代码结构
+
+- `app/api/`: API 路由和请求响应模型
+- `app/graph/`: LangGraph 状态机和编排逻辑
+- `app/tools/`: 工具执行器和技能实现
+- `app/llm/`: 大模型客户端封装
+- `app/sse/`: SSE 流式响应处理
+
+## 监控和维护
+
+### 日志查看
+
+```bash
+# 查看所有日志
+docker compose logs -f
+
+# 查看智能体日志
+docker compose logs -f agent-backend
+
+# 查看 MySQL 日志
+docker compose logs -f mysql
 ```
+
+### 服务管理
+
+```bash
+# 重启服务
+docker compose restart agent-backend
+
+# 查看服务状态
+docker compose ps
+
+# 停止服务
+docker compose down
+
+# 清空数据（包括会话记忆）
+docker compose down -v
+```
+
+## 常见问题
+
+### 无法连接 Java 后端
+
+检查 `JAVA_BACKEND_URL` 配置是否正确：
+
+```bash
+# 获取 Docker 网桥网关 IP
+docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
+
+# 更新 .env
+JAVA_BACKEND_URL=http://<网关IP>:8081
+
+# 重启服务
+docker compose up -d
+```
+
+### 大模型调用失败
+
+- 检查 API Key 是否有效
+- 确认已开通对应模型
+- 验证网络连通性
+
+更多问题见 [DEPLOY.md](DEPLOY.md#常见问题)
+
+## 版本历史
+
+### v1.0.0 (2026-09-10)
+
+- ✅ 适配评分接口规范 v3
+- ✅ 支持新旧格式评分项编号
+- ✅ 更新统一状态枚举
+- ✅ 优化结果格式化逻辑
+- ✅ 完善部署文档
+
+详见 [CHANGELOG.md](CHANGELOG.md)
+
+## 许可证
+
+本项目为内部使用项目。
+
+## 联系方式
+
+如有问题或建议，请联系开发团队。
