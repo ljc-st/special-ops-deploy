@@ -38,6 +38,8 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(AuthMiddleware, settings=settings)
     app.include_router(router)
+    # 保留反向代理/现有前端使用的 /api/v1 兼容入口；/v1 仍是规范主入口。
+    app.include_router(router, prefix="/api")
 
     @app.get("/health")
     async def health():

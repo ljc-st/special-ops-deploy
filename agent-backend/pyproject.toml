@@ -34,3 +34,6 @@ include = ["app*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: requires a reachable Java system-score service",
+]

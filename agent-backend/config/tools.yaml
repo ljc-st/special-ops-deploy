@@ -1,59 +1,55 @@
-# 工具注册表：Java 接口以"工具"为单位配置化接入（docs/agent-design.md §5）。
-# 新增接口 = 新增一条配置，无需改代码。
+# 工具注册表：Java 接口以"工具"为单位配置化接入。
+# 对齐《系统评分接口规范》（统一结果模型 + 评分项字符串编码）。
 #
 # executor_type:
-#   mock - 本地模拟返回（联调/测试，不调用真实接口）
-#   http - 真实 HTTP 调用（接入 Java 接口时使用）
-#
-# auth_mode:
-#   inherit - 透传前端用户 token（Authorization: Bearer）
-#   token   - 服务间静态令牌（header X-Internal-Token，值从环境变量 ${INTERNAL_TOKEN} 注入）
-#   sign    - 预留：时间戳+签名
+#   skill - 组合技能（内部编排底层 http 工具）
+#   http  - 真实 HTTP 调用（接入 Java 接口）
+#   mock  - 本地模拟（联调/测试）
 tools:
   # ==================== special 模块组合技能工具（固定行动序列，覆盖高频场景）====================
   - name: special_score_overview
-    description: 查询特殊作业模块的评分总览（总分、三维度得分、是否通过）；当用户询问"特殊作业评分怎么样、得了几分、是否合格"时优先使用本工具。用户明确询问单个评分项或报备/作业票/抽查功能建设时不要使用本工具
+    description: 查询特殊作业模块的评分总览（总分、三维度得分）；当用户询问"特殊作业评分怎么样、得了几分、是否合格"时优先使用本工具。用户明确询问单个评分项或报备/作业票/抽查功能建设时不要使用本工具
     executor_type: skill
     skill_name: special_score_overview
     parameters: {}
 
   - name: special_report_function_build
-    description: 现场评估特殊作业报备功能建设评分项 1.1（近N月有报备数据），返回本次 Java 评分接口的状态、数据量和原因；当用户询问"特殊作业报备功能建设情况"、"报备功能建设"、"1.1"或"近N月有报备数据"时必须使用本工具，不要调用评分总览；带有应用活跃度/近N天有更新时不要使用
+    description: 现场评估特殊作业报备功能建设评分项（近N月有报备数据），返回该评分项的得分、状态和原因；当用户询问"特殊作业报备功能建设情况"、"报备功能建设"或"近N月有报备数据"时必须使用本工具，不要调用评分总览；带有应用活跃度/近N天有更新时不要使用
     executor_type: skill
     skill_name: special_report_function_build
     parameters: {}
 
   - name: special_ticket_function_build
-    description: 现场评估特殊作业票管理功能建设评分项 1.2（近N月有作业票数据），返回本次 Java 评分接口的状态、数据量和原因；当用户询问"特殊作业票管理功能建设情况评估"、"作业票管理功能建设"、"1.2"或"近N月有作业票数据"时必须使用本工具，不要调用评分总览；带有应用活跃度/近N天有更新时不要使用
+    description: 现场评估特殊作业票管理功能建设评分项（近N月有作业票数据），返回该评分项的得分、状态和原因；当用户询问"特殊作业票管理功能建设情况评估"、"作业票管理功能建设"或"近N月有作业票数据"时必须使用本工具，不要调用评分总览；带有应用活跃度/近N天有更新时不要使用
     executor_type: skill
     skill_name: special_ticket_function_build
     parameters: {}
 
   - name: special_inspection_function_build
-    description: 现场评估特殊作业抽查功能建设评分项 1.3（近N月有抽查数据），返回本次 Java 评分接口的状态、数据量和原因；当用户询问"特殊作业抽查功能建设情况"、"抽查功能建设"、"1.3"或"近N月有抽查数据"时必须使用本工具，不要调用评分总览；带有应用活跃度/近N天有更新时不要使用
+    description: 现场评估特殊作业抽查功能建设评分项（近N月有抽查数据），返回该评分项的得分、状态和原因；当用户询问"特殊作业抽查功能建设情况"、"抽查功能建设"或"近N月有抽查数据"时必须使用本工具，不要调用评分总览；带有应用活跃度/近N天有更新时不要使用
     executor_type: skill
     skill_name: special_inspection_function_build
     parameters: {}
 
   - name: special_data_quality_evaluation
-    description: 现场评估特殊作业模块数据质量维度（2.x），先读取 Java 返回的维度评分项，再逐项实时试算并返回编号、实得分/满分、状态、原因和关键事实；不传 itemNo 时返回整个数据质量维度，传 itemNo 时只返回该评分项；当用户询问数据质量、数据完整性、接入率、重复率或明确提到 2.x 时必须使用，不要只返回总览
+    description: 现场评估特殊作业模块数据质量维度，先读取 Java 返回的维度评分项，再逐项试算并返回评分项编码、实得分/满分、状态、原因；不传 itemNo 时返回整个数据质量维度，传 itemNo 时只返回该评分项；当用户询问数据质量、数据完整性、接入率、重复率时必须使用，不要只返回总览
     executor_type: skill
     skill_name: special_data_quality_evaluation
     parameters:
       itemNo:
         type: string
         required: false
-        description: 明确询问单个数据质量评分项时传入编号（如 2.1、2.3）；询问整个数据质量维度时不传
+        description: 明确询问单个数据质量评分项时传入其正式字符串编码（从 score_evaluate_detail 返回的 itemNo 获取）；询问整个数据质量维度时不传
 
   - name: special_application_effect_evaluation
-    description: 现场评估特殊作业模块应用成效维度（3.x），先读取 Java 返回的维度评分项，再逐项实时试算并返回编号、实得分/满分、状态、原因和问题实体；不传 itemNo 时返回整个应用成效维度，传 itemNo 时只返回该评分项；当用户询问应用成效、应用效果、实际使用、关联作业或明确提到 3.x 时必须使用，不要只返回总览；报备有效性对应 3.1，作业票有效性对应 3.2，抽查功能应用活跃度对应 3.5
+    description: 现场评估特殊作业模块应用成效维度，先读取 Java 返回的维度评分项，再逐项试算并返回评分项编码、实得分/满分、状态、原因和问题实体；不传 itemNo 时返回整个应用成效维度，传 itemNo 时只返回该评分项；当用户询问应用成效、应用效果、实际使用、关联作业时必须使用，不要只返回总览
     executor_type: skill
     skill_name: special_application_effect_evaluation
     parameters:
       itemNo:
         type: string
         required: false
-        description: 明确询问单个应用成效评分项时传入编号（如 3.5、3.14）；询问整个应用成效维度时不传
+        description: 明确询问单个应用成效评分项时传入其正式字符串编码（从 score_evaluate_detail 返回的 itemNo 获取）；询问整个应用成效维度时不传
 
   - name: special_score_drilldown
     description: 分析特殊作业模块的扣分项及原因（自动逐项查询扣分原因并汇总）；当用户询问"特殊作业哪些项扣分了、为什么扣分、扣分原因"时优先使用本工具
@@ -63,7 +59,7 @@ tools:
       itemNo:
         type: string
         required: false
-        description: 限定分析某个评分项编号（如 2.3、3.5.1）；不传则分析全部扣分项
+        description: 限定分析某个评分项时传入其正式字符串编码；不传则分析全部扣分项
       dimension:
         type: string
         required: false
@@ -78,28 +74,42 @@ tools:
       itemNo:
         type: string
         required: false
-        description: 应用问题子项编号（如 3.5.1）；不传则自动分析所有 3.5.x 子项
+        description: 应用问题评分项的正式字符串编码；不传则自动分析应用成效维度下所有返回实体的评分项
 
-  # ==================== 系统评分接口（真实 Java 服务，见 docs/agent-design.md §5 与接口规范）====================
-  - name: score_list_parks
-    description: 查询数据库中有效园区列表（园区 ID、名称和编码）；仅在用户选择所有园区时调用，不能用猜测的园区 ID 替代
-    executor_type: http
-    http:
-      method: GET
-      url: "{{ java_backend_url }}/systemScore/parks"
-      headers:
-        "Accept": "application/json"
-      timeout_seconds: 15
-      retry: { max_attempts: 2, backoff: fixed, interval_ms: 200 }
-      success_codes: [200]
-      response_path: "$"
-      observation_template: "有效园区 {{ data|length }} 个"
-      truncate_chars: 1000
+  - name: special_item_search
+    description: 在特殊作业评分树中按评分项名称或业务关键词查找正式字符串编码；只返回唯一或明确匹配的评分项，不猜测 itemNo。未找到或匹配多个时应向用户说明
+    executor_type: skill
+    skill_name: special_item_search
+    parameters:
+      keyword: { type: string, required: true, description: 评分项名称或业务关键词 }
+      dimension: { type: string, required: false, enum: [functionBuild, dataQuality, applicationEffect], description: 可选维度限定 }
+
+  - name: special_item_detail
+    description: 查询特殊作业单个评分项详情；可传 score_evaluate_detail 返回的正式 itemNo，或传唯一评分项关键词自动定位。匹配不唯一时不擅自选择
+    executor_type: skill
+    skill_name: special_item_detail
+    parameters:
+      itemNo: { type: string, required: false, description: 从评分树获取的正式字符串编码 }
+      keyword: { type: string, required: false, description: 评分项名称或业务关键词 }
+      dimension: { type: string, required: false, enum: [functionBuild, dataQuality, applicationEffect], description: 可选维度限定 }
+
+  - name: special_status_diagnosis
+    description: 区分特殊作业评分中的通过、业务问题、数据不足和计算异常；用户询问哪些是业务问题、数据不足或计算异常时使用
+    executor_type: skill
+    skill_name: special_status_diagnosis
     parameters: {}
-    auth_mode: none
 
+  - name: special_data_query
+    description: 只读智能问数技能入口。根据数据库表说明查询企业基础信息、评分结果或作业票评判明细；当前未配置数据库时必须明确说明不能读取，禁止让模型自行拼接或执行 SQL
+    executor_type: skill
+    skill_name: special_data_query
+    parameters:
+      question: { type: string, required: true, description: 用户要查询的数据库明细问题 }
+      tableHint: { type: string, required: false, description: 可选结果表提示，仅允许说明文档中的白名单表 }
+
+  # ==================== 系统评分接口（真实 Java 服务）====================
   - name: score_evaluate_detail
-    description: 实时计算指定模块（或全部模块）的完整评分明细，返回各模块/维度/评分项的得分、是否通过、扣分项及原因；当用户询问"评分情况、得了多少分、是否合格、哪些项扣分"时调用。单个评分项查询应使用 score_calculate
+    description: 实时计算指定模块列表的完整评分明细，返回统一结果树（parkId/score/maxScore/modules→dimensions→items，每项含 itemNo 字符串编码、score/maxScore、status、detailText、entities）；当用户询问"评分情况、得了多少分、是否合格、哪些项扣分"时调用。单个评分项查询应使用 score_calculate
     executor_type: http
     http:
       method: POST
@@ -107,13 +117,13 @@ tools:
       headers:
         "Content-Type": "application/json"
       body_template: |
-        {"modules": [{% if module %}"{{ module }}"{% endif %}]{% if inputs.get('parkId') %},"parkId":"{{ inputs.get('parkId') }}"{% endif %}}
+        {"modules": [{% if module %}"{{ module }}"{% else %}"special","closed","major","dual","safety","emergency","operation"{% endif %}]}
       timeout_seconds: 30
       retry: { max_attempts: 2, backoff: fixed, interval_ms: 200 }
       success_codes: [200]
       response_path: "$"
       observation_template: |
-        {% if modules %}总分 {{ score }}/{{ maxScore }}，{{ '通过' if passed else '未通过' }}，共 {{ modules|length }} 个模块：{% for m in modules %}{{ m.moduleName }} {{ m.score }}/{{ m.maxScore }}分{% if m.dimensions %}{% for d in m.dimensions %}{{ d.dimensionName }} {{ d.score }}/{{ d.maxScore }}分{% if d.items %}{% for it in d.items %}{% if it.status != 'PASS' %}[扣分]{{ it.itemNo }} {{ it.itemName }} 得{{ it.score }}/{{ it.maxScore }}{% if it.detailText %}：{{ it.detailText }}{% endif %}{% endif %}{% endfor %}{% endif %}{% endfor %}{% endif %}{% endfor %}{% else %}接口未返回模块明细{% endif %}
+        {% if modules %}总分 {{ score }}/{{ maxScore }}。{% for m in modules %}模块 {{ m.moduleName }}({{ m.moduleCode }}) {{ m.score }}/{{ m.maxScore }}分：{% for d in m.dimensions %}{{ d.dimensionName }} {{ d.score }}/{{ d.maxScore }}分{% if d['items'] %}；{% for it in d['items'] %}{{ it.itemNo }} {{ it.itemName }} {{ it.score }}/{{ it.maxScore }} {{ it.status }}{% if it.detailText %}：{{ it.detailText }}{% endif %}{% if not loop.last %}；{% endif %}{% endfor %}{% endif %}{% endfor %}{% endfor %}{% else %}接口未返回模块明细{% endif %}
       truncate_chars: 2500
     parameters:
       module:
@@ -124,7 +134,7 @@ tools:
     auth_mode: none
 
   - name: score_calculate
-    description: 实时试算单个评分项，返回该评分项的得分状态、异常原因、命中的实体与指标；当用户询问"某个评分项为什么扣分/没得分、试算某项"时调用
+    description: 实时试算单个评分项，返回该评分项的得分、状态、详情文本与实体；当用户询问"某个评分项为什么扣分/没得分、试算某项"时调用
     executor_type: http
     http:
       method: POST
@@ -132,13 +142,13 @@ tools:
       headers:
         "Content-Type": "application/json"
       body_template: |
-        {"items":[{"module":"{{ module }}","dimension":"{{ dimension }}","itemNo":"{{ itemNo }}"}]{% if inputs.get('parkId') %},"parkId":"{{ inputs.get('parkId') }}"{% endif %}}
+        {"items":[{"module":"{{ module }}","dimension":"{{ dimension }}","itemNo":"{{ itemNo }}"}]}
       timeout_seconds: 30
       retry: { max_attempts: 2, backoff: fixed, interval_ms: 200 }
       success_codes: [200]
-      response_path: "$[0]"
+      response_path: "$"
       observation_template: |
-        评分项 {{ itemNo }} {{ itemName }}：状态 {{ status }}；原因：{{ detailText }}{% if entities|length > 0 %}；命中 {{ entities|length }} 个实体：{% for e in entities %}{{ e.entityName }}({{ e.entityId }}){% if not loop.last %}、{% endif %}{% endfor %}{% endif %}
+        {% if data %}{% for it in data %}评分项 {{ it.itemNo }} {{ it.itemName }}：得分 {{ it.score }}/{{ it.maxScore }}，状态 {{ it.status }}；原因：{{ it.detailText }}{% if it.entities %}；涉及实体：{% for e in it.entities %}{{ e.entityName }}({{ e.entityId }}){% if not loop.last %}、{% endif %}{% endfor %}{% endif %}{% if not loop.last %}；{% endif %}{% endfor %}{% else %}接口未返回评分项{% endif %}
       truncate_chars: 4000
     parameters:
       module:
@@ -154,7 +164,7 @@ tools:
       itemNo:
         type: string
         required: true
-        description: 评分项编号，新格式为字符串编码（如 special-functionBuild-tszybbgnjsqkpg），旧格式为数字编号（如 1.1、2.3、3.5.1）
+        description: 评分项正式字符串编码，格式 <模块>-<维度>-<拼音首字母>（如 special-functionBuild-tszybbgnjsqkpg）；从 score_evaluate_detail 返回的 itemNo 字段获取
     auth_mode: none
 
   # ==================== 本地联调示例（executor_type: mock 不调用真实接口）====================

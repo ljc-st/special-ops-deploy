@@ -103,6 +103,8 @@ class ExecContext:
     request_id: str = ""
     user_token: str = ""
     inputs: dict[str, Any] = field(default_factory=dict)
+    log_client: Any = None
+    data_query_service: Any = None
 
 
 class ToolExecutor(ABC):

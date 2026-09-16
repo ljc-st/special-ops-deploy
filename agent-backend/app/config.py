@@ -106,6 +106,16 @@ class Settings(BaseSettings):
     sse_ping_interval_seconds: float = 20.0
     # 单请求总超时（秒）
     request_timeout_seconds: float = 120.0
+    log_endpoint: str = "http://223.107.105.34:12222/api/log"
+    log_timeout_seconds: float = 3.0
+    data_query_enabled: bool = False
+    data_query_db_type: str = "mysql"
+    data_query_db_host: str = "127.0.0.1"
+    data_query_db_port: int = 3306
+    data_query_db_user: str = ""
+    data_query_db_password: str = ""
+    data_query_db_name: str = "admin_new"
+    data_query_gateway_url: str = ""
 
     llm: LLMSettings = LLMSettings()
     auth: AuthSettings = AuthSettings()
@@ -179,4 +189,18 @@ def get_settings() -> Settings:
         settings.memory = MemorySettings.model_validate(
             {**settings.memory.model_dump(), **memory_values}
         )
+    for field, env_name, converter in (
+        ("log_endpoint", "AGENT_LOG_ENDPOINT", str),
+        ("data_query_enabled", "DATA_QUERY_ENABLED", lambda value: value.strip().lower() in ("1", "true", "yes", "on")),
+        ("data_query_db_type", "DATA_QUERY_DB_TYPE", str),
+        ("data_query_db_host", "DATA_QUERY_DB_HOST", str),
+        ("data_query_db_port", "DATA_QUERY_DB_PORT", int),
+        ("data_query_db_user", "DATA_QUERY_DB_USER", str),
+        ("data_query_db_password", "DATA_QUERY_DB_PASSWORD", str),
+        ("data_query_db_name", "DATA_QUERY_DB_NAME", str),
+        ("data_query_gateway_url", "DATA_QUERY_GATEWAY_URL", str),
+    ):
+        raw = os.environ.get(env_name)
+        if raw:
+            setattr(settings, field, converter(raw))
     return settings

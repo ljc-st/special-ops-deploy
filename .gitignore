@@ -40,6 +40,10 @@ ENV/
 *.log
 logs/
 
+# 运行数据
+agent-backend/data/*.db
+agent-backend/data/*.sqlite*
+
 # Docker
 .dockerignore
 

@@ -11,6 +11,8 @@
 """
 
 import json
+import re
+from functools import lru_cache
 from typing import Callable
 
 from langgraph.config import get_stream_writer
@@ -18,6 +20,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph.prompts import get_system_prompt
 from app.graph.state import AgentState
+from app.tools.score_format import _html_table
 from app.llm.client import (
     ChatClient,
     ToolCall,
@@ -26,6 +29,8 @@ from app.llm.client import (
 )
 from app.tools.protocol import ExecContext, ToolResult, dump_json
 from app.tools.registry import ToolRegistry
+from app.data_query import ReadOnlySQLDataQueryService, SCORE_RESULT_TABLES, DisabledDataQueryService
+from app.config import get_settings
 
 
 async def _stream_llm(
@@ -34,6 +39,8 @@ async def _stream_llm(
     tools: list[dict] | None,
     writer,
     emit_content: bool = True,
+    content_chunks: list[str] | None = None,
+    stream_content: bool = False,
 ) -> tuple[str, list[ToolCallDelta]]:
     """调用 LLM 流式生成，把 token 增量推给外层（llm_token 事件）。"""
     content_parts: list[str] = []
@@ -41,17 +48,24 @@ async def _stream_llm(
     async for chunk in llm.stream_chat(messages, tools=tools):
         if chunk.content:
             content_parts.append(chunk.content)
-            if emit_content:
+            if content_chunks is not None:
+                content_chunks.append(chunk.content)
+            if stream_content:
                 writer({"type": "llm_token", "content": chunk.content})
         if chunk.tool_call_deltas:
             tool_deltas.extend(chunk.tool_call_deltas)
-    return "".join(content_parts), tool_deltas
+    content = "".join(content_parts)
+    # 工具规划轮的文本只作为内部草稿；最终工具轮由调用方重新生成答案。
+    # 直答轮没有工具调用，才发布文本。
+    if emit_content and content:
+        writer({"type": "llm_token", "content": content})
+    return content, tool_deltas
 
 
 def _structured_observation(messages: list[dict]) -> str:
     """查找技能已经生成的多项评分表，作为格式契约的事实来源。"""
     table_markers = {
-        "| 评分项 | 项目名称 | 得分 | 状态 | 原因 |": 3,
+        "| 评分项 | 项目名称 | 得分 | 状态 | 原因 |": 2,
         "| 评分项 | 票号/票据 | 企业 | 问题原因 |": 2,
         "| 园区 | 得分 | 结论 |": 1,
     }
@@ -61,6 +75,10 @@ def _structured_observation(messages: list[dict]) -> str:
         observation = message.get("content")
         if not isinstance(observation, str):
             continue
+        # 评分技能已经生成了适配前端的 HTML 三线表时，直接把该事实标记为
+        # 不可改写内容，避免模型在最终回答中把表格改成项目符号。
+        if "<table" in observation and ("评分项" in observation or "问题原因" in observation):
+            return observation
         for marker, minimum_rows in table_markers.items():
             if marker not in observation:
                 continue
@@ -84,9 +102,13 @@ def _preserve_score_table(content: str, messages: list[dict]) -> str:
         "| 评分项 | 票号/票据 | 企业 | 问题原因 |",
         "| 园区 | 得分 | 结论 |",
     )
-    if not observation or any(marker in content for marker in table_markers):
+    # 只要工具已经返回标准表格，就以工具表格为准，覆盖模型自行生成的
+    # HTML/Markdown 表格，避免正式编码进入第一列或表头被改写。
+    if observation:
+        return observation
+    if any(marker in content for marker in table_markers):
         return content
-    return observation
+    return content
 
 
 def _split_pipe_row(line: str) -> list[str]:
@@ -143,6 +165,53 @@ def _normalize_score_item_table(content: str) -> str:
     return content
 
 
+def _normalize_score_bullets(content: str) -> str:
+    """三项及以上同类评分清单统一转成面向用户的三线表。"""
+    lines = content.splitlines()
+    pattern = re.compile(r"^\s*[-*•]\s*(.+?)\s*[（(](\d+\.\d+(?:\.\d+)?)[）)]\s*[：:]\s*(.*)$")
+    parsed: list[tuple[int, list[str]]] = []
+    for index, line in enumerate(lines):
+        match = pattern.match(line)
+        if not match:
+            continue
+        name, sequence, detail = match.groups()
+        status = "通过" if "通过" in detail else ("存在问题" if "问题" in detail or "未" in detail else "无法判定")
+        reason = re.sub(r"^\s*(通过|存在问题|数据不足|计算异常)[。\.、:]?\s*", "", detail).strip() or "-"
+        parsed.append((index, [sequence, name.strip(), "— / — 分", status, reason]))
+    if len(parsed) < 3:
+        return content
+    # 仅转换连续的同类评分项，保留标题、总分和总结建议等外围内容。
+    first = parsed[0][0]
+    last = parsed[-1][0]
+    if [item[0] for item in parsed] != list(range(first, last + 1)):
+        return content
+    rows = [{"itemNo": row[0], "itemName": row[1], "score": row[2], "status": row[3], "detailText": row[4]} for _, row in parsed]
+    return "\n".join(lines[:first] + [_html_table(rows)] + lines[last + 1:])
+
+
+def _aggregate_single_item_observations(content: str, messages: list[dict]) -> str:
+    """模型只输出维度汇总时，把本轮多个单项工具结果补回评分表。"""
+    rows: list[dict] = []
+    seen: set[str] = set()
+    pattern = re.compile(
+        r"(?m)^\s*(special-[^\s]+)\s+(.+?)：\s*([0-9.]+\s*/\s*[0-9.]+(?:\s*分)?)[，,。]\s*(通过|存在问题|数据不足|计算异常)"
+    )
+    for message in messages:
+        if message.get("role") != "tool" or "特殊作业单项评估" not in str(message.get("content") or ""):
+            continue
+        observation = str(message.get("content") or "")
+        match = pattern.search(observation)
+        if not match or match.group(1) in seen:
+            continue
+        code, name, score, status = match.groups()
+        reason_match = re.search(r"(?:^|\n)原因[:：]\s*(.+)", observation)
+        rows.append({"itemNo": code, "itemName": name.strip(), "score": score, "maxScore": "", "status": status, "detailText": reason_match.group(1).strip() if reason_match else "-"})
+        seen.add(code)
+    if len(rows) < 3:
+        return content
+    return content.rstrip() + "\n\n" + _html_table(rows)
+
+
 def _with_system_prompt(messages: list[dict], memory_context: str = "") -> list[dict]:
     """在消息最前面注入系统提示词（仅当尚无 system 消息时，多轮不重复）。"""
     if any(m.get("role") == "system" for m in messages):
@@ -168,21 +237,32 @@ def _make_agent_node(
         writer = get_stream_writer()
         messages = _with_system_prompt(state["messages"], state.get("memory_context", ""))
         has_tool_result = any(m.get("role") == "tool" for m in messages)
+        chunks: list[str] = []
         content, tool_deltas = await _stream_llm(
             llm,
             messages,
-            registry.llm_schemas(),
+            None if has_tool_result else registry.llm_schemas(),
             writer,
-            emit_content=True,
+            emit_content=False,
+            content_chunks=chunks,
+            # 工具结果后的回答要先完成表格/序号规范化，再开始向前端流式发送。
+            stream_content=False,
         )
         tool_calls = accumulate_tool_calls(tool_deltas)
-        if has_tool_result:
-            if not content.strip() and not tool_calls:
-                content = _fallback_tool_answer(messages)
-                if content:
+        if not tool_calls:
+            if has_tool_result:
+                if not content.strip():
+                    content = _fallback_tool_answer(messages)
+                content = _normalize_score_item_table(content)
+                content = _preserve_score_table(content, messages)
+                content = _normalize_score_bullets(content)
+                content = _aggregate_single_item_observations(content, messages)
+            if content:
+                if has_tool_result:
                     writer({"type": "llm_token", "content": content})
-            content = _normalize_score_item_table(content)
-            content = _preserve_score_table(content, messages)
+                else:
+                    for chunk in chunks:
+                        writer({"type": "llm_token", "content": chunk})
 
         assistant: dict = {"role": "assistant", "content": content or None}
         if tool_calls:
@@ -210,19 +290,21 @@ def _make_finalize_node(llm: ChatClient) -> Callable[[AgentState], dict]:
         writer = get_stream_writer()
         messages = _with_system_prompt(state["messages"], state.get("memory_context", ""))
         has_tool_result = any(m.get("role") == "tool" for m in messages)
+        content_chunks: list[str] = []
         content, _ = await _stream_llm(
-            llm, messages, None, writer, emit_content=True
+            llm, messages, None, writer, emit_content=False,
+            content_chunks=content_chunks, stream_content=False,
         )
         if has_tool_result:
             if not content.strip():
                 content = _fallback_tool_answer(messages)
-                if content:
-                    writer({"type": "llm_token", "content": content})
             content = _normalize_score_item_table(content)
             content = _preserve_score_table(content, messages)
+            content = _normalize_score_bullets(content)
+            content = _aggregate_single_item_observations(content, messages)
         if not content:
             content = "抱歉，暂时无法获取答案，请稍后再试。"
-            writer({"type": "llm_token", "content": content})
+        writer({"type": "llm_token", "content": content})
         return {
             "messages": messages + [{"role": "assistant", "content": content}]
         }
@@ -236,6 +318,50 @@ def safe_tool_observation(result: ToolResult) -> str:
     return "\u8bc4\u5206\u6570\u636e\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002"
 
 
+_TOOL_LOG_NAMES = {
+    "special_data_query": "智能问数",
+    "special_score_overview": "特殊作业评分总览",
+    "special_score_drilldown": "特殊作业扣分分析",
+    "special_item_search": "特殊作业评分项搜索",
+    "special_item_detail": "特殊作业评分项详情",
+    "special_status_diagnosis": "特殊作业状态诊断",
+    "special_ticket_issue": "问题作业票查询",
+    "score_evaluate_detail": "评分明细",
+    "score_calculate": "评分试算",
+}
+
+
+@lru_cache(maxsize=1)
+def _data_query_service():
+    settings = get_settings()
+    if not settings.data_query_enabled or settings.data_query_db_type.lower() != "mysql":
+        return DisabledDataQueryService()
+    try:
+        import pymysql
+        def connect():
+            return pymysql.connect(
+                host=settings.data_query_db_host,
+                port=settings.data_query_db_port,
+                user=settings.data_query_db_user,
+                password=settings.data_query_db_password,
+                database=settings.data_query_db_name,
+                charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+                read_timeout=15,
+                write_timeout=15,
+                connect_timeout=10,
+                autocommit=True,
+            )
+        gateway_url = settings.data_query_gateway_url or f"http://{settings.data_query_db_host}:{settings.data_query_db_port}"
+        return ReadOnlySQLDataQueryService(connect, set(SCORE_RESULT_TABLES), gateway_url=gateway_url)
+    except Exception:
+        return DisabledDataQueryService()
+
+
+def _tool_log_name(name: str) -> str:
+    return _TOOL_LOG_NAMES.get(name, "特殊作业评分")
+
+
 def _make_tools_node(registry: ToolRegistry) -> Callable[[AgentState], dict]:
     async def tools_node(state: AgentState) -> dict:
         writer = get_stream_writer()
@@ -244,6 +370,8 @@ def _make_tools_node(registry: ToolRegistry) -> Callable[[AgentState], dict]:
             request_id=state["request_id"],
             user_token=state["user_token"],
             inputs=state["inputs"],
+            log_client=state.get("log_client"),
+            data_query_service=_data_query_service(),
         )
         tool_msgs: list[dict] = []
         position = state["thought_position"]
@@ -264,6 +392,9 @@ def _make_tools_node(registry: ToolRegistry) -> Callable[[AgentState], dict]:
                     "tool_status": "started",
                 }
             )
+            log_name = _tool_log_name(call.name)
+            if ctx.log_client:
+                await ctx.log_client.write(ctx.request_id, f"正在调用{log_name}工具")
             if oscillating:
                 result = ToolResult(
                     False,
@@ -272,6 +403,11 @@ def _make_tools_node(registry: ToolRegistry) -> Callable[[AgentState], dict]:
                 )
             else:
                 result = await registry.execute(call, ctx)
+            if ctx.log_client:
+                await ctx.log_client.write(
+                    ctx.request_id,
+                    f"{log_name}工具调用完成" if result.ok else f"{log_name}工具调用失败",
+                )
             writer(
                 {
                     "type": "agent_thought",
@@ -279,7 +415,7 @@ def _make_tools_node(registry: ToolRegistry) -> Callable[[AgentState], dict]:
                     "thought": "",
                     "tool": call.name,
                     "tool_input": {},
-                    "observation": result.observation[:500],
+                    "observation": "工具调用完成" if result.ok else "工具调用失败",
                     "tool_status": "succeeded" if result.ok else "failed",
                 }
             )

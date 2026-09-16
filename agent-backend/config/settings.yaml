@@ -1,45 +1,29 @@
-# 服务配置样例：环境变量优先（AGENT_/LLM_/AUTH_/TOOL_/MEMORY_ 前缀），
-# 此文件提供本地开发默认值，复制为 config/settings.local.yaml 可做本地覆盖。
 app_name: agent-service
-
-# function calling 循环最大迭代次数
 max_iterations: 5
-
-# 系统提示词外部文件路径（空=使用内置默认）
 system_prompt_file: ""
-
-# 工具 observation 截断长度（字符）
-observation_truncate_chars: 2000
-
-# SSE 心跳间隔（秒）
+observation_truncate_chars: 4000
 sse_ping_interval_seconds: 20.0
-
-# 单请求总超时（秒）
 request_timeout_seconds: 120.0
 
 llm:
-  # openai | mock（默认保留 mock，使用 start-real.ps1 启用真实模型）
   mode: mock
-  base_url: "https://gptch.cloud/v1"
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
   api_key: ""
-  model: "gpt-5.5"
+  model: "qwen3.7-plus"
   temperature: 0.3
   max_tokens: 2048
   timeout_seconds: 60.0
 
 auth:
-  # 生产必须开启并配置 api_keys
-  enabled: true
-  api_keys:
-    - "app-50b15bd5240cf16958ab7f6e7d194e1f"
+  enabled: false
+  api_keys: []
 
 memory:
-  # mysql | sqlite | memory | redis
-  backend: mysql
+  backend: sqlite
   host: "127.0.0.1"
   port: 3306
-  user: "root"
-  password: "yx1353171048,"
+  user: ""
+  password: ""
   database: "agent_memory"
   redis_url: "redis://localhost:6379/0"
   ttl_days: 7

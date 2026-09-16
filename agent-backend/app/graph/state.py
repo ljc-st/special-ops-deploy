@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     request_id: str
     user_token: str
     inputs: dict
+    log_client: object
     iteration: int
     max_iterations: int
     tool_calls: list[ToolCall]

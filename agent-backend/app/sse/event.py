@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 # Dify 事件类型
+EVENT_MESSAGE_START = "message_start"
 EVENT_MESSAGE = "message"
+EVENT_AGENT_THOUGHT = "agent_thought"
 EVENT_MESSAGE_END = "message_end"
 EVENT_ERROR = "error"
 EVENT_PING = "ping"
@@ -25,6 +27,7 @@ class SSEEvent:
     def serialize(self) -> str:
         payload = {"event": self.event, **self.data}
         return (
+            f"event: {self.event}\n"
             "data: "
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             + "\n\n"

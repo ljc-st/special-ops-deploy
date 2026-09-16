@@ -4,7 +4,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json"}
+_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/api/health", "/api/docs", "/api/openapi.json"}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

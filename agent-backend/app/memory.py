@@ -36,6 +36,15 @@ class SQLiteMemoryStore:
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
+    def belongs_to(self, conversation_id: str, user_id: str) -> bool:
+        """Check ownership without creating or mutating a conversation."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT user_id FROM conversations WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+        return row is not None and (not user_id or row["user_id"] == user_id)
+
     def _initialize(self) -> None:
         with self._connect() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
