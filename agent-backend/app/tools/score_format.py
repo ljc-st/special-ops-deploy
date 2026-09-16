@@ -89,14 +89,20 @@ _ITEM_CODE_NAMES = {
 }
 
 _DIMENSION_DISPLAY_NAMES = {
-    "functionBuild": "特殊作业功能建设板块",
-    "功能建设": "特殊作业功能建设板块",
-    "dataQuality": "特殊作业数据质量板块",
-    "数据质量": "特殊作业数据质量板块",
-    "数据质量评估": "特殊作业数据质量板块",
-    "applicationEffect": "特殊作业应用成效板块",
-    "应用成效": "特殊作业应用成效板块",
-    "应用成效评估": "特殊作业应用成效板块",
+    "functionBuild": "特殊作业功能建设维度",
+    "功能建设": "特殊作业功能建设维度",
+    "特殊作业功能建设": "特殊作业功能建设维度",
+    "特殊作业功能建设板块": "特殊作业功能建设维度",
+    "dataQuality": "特殊作业数据质量维度",
+    "数据质量": "特殊作业数据质量维度",
+    "数据质量评估": "特殊作业数据质量维度",
+    "特殊作业数据质量": "特殊作业数据质量维度",
+    "特殊作业数据质量板块": "特殊作业数据质量维度",
+    "applicationEffect": "特殊作业应用成效维度",
+    "应用成效": "特殊作业应用成效维度",
+    "应用成效评估": "特殊作业应用成效维度",
+    "特殊作业应用成效": "特殊作业应用成效维度",
+    "特殊作业应用成效板块": "特殊作业应用成效维度",
 }
 
 
@@ -110,7 +116,7 @@ def _full_dimension_name(value: object, code: object = "") -> str:
         return _DIMENSION_DISPLAY_NAMES[raw]
     if raw.startswith("特殊作业"):
         return raw
-    return f"特殊作业{raw}板块" if raw else "特殊作业评分板块"
+    return f"特殊作业{raw}维度" if raw else "特殊作业评分维度"
 
 
 def _score_sequence(item_no: object, item_name: object) -> str:
@@ -241,14 +247,14 @@ def _html_table(rows: list[dict], include_sequence: bool = True) -> str:
 
 
 def _dimension_summary(items: list[dict], label: str) -> list[str]:
-    """面向用户给出简短情况总结和建议，不替代明细原因。"""
+    """面向用户给出简短评估总结和建议，不替代明细原因。"""
     problem = sum(1 for item in items if item.get("status") in {"BUSINESS_ISSUE", "DATA_INSUFFICIENT", "CALCULATION_ERROR"})
     passed = sum(1 for item in items if item.get("status") == "PASS")
     if problem == 0:
-        summary = f"情况总结：{label}共核查{len(items)}项，当前未发现异常。"
+        summary = f"评估总结：{label}共核查{len(items)}项，当前未发现异常。"
         suggestions = [f"- 建议继续保持{label}相关数据的正常更新和使用。"]
     else:
-        summary = f"情况总结：{label}共核查{len(items)}项，其中{passed}项通过、{problem}项存在问题或数据不足，问题主要集中在数据覆盖、更新及时性或字段完整性方面。"
+        summary = f"评估总结：{label}共核查{len(items)}项，其中{passed}项通过、{problem}项存在问题或数据不足，问题主要集中在数据覆盖、更新及时性或字段完整性方面。"
         suggestions = [f"- 建议优先补齐{label}中未覆盖或数据不足的评分项。", "- 建议持续更新相关业务数据，并定期复核异常项。"]
     return [summary, f"{label}总结建议：", *suggestions]
 
@@ -339,14 +345,14 @@ def format_special_result(skill_name: str, result: ToolResult) -> ToolResult:
         if detail:
             body += f"\n原因：{detail}"
         if state == "通过":
-            summary = "情况总结：特殊作业功能建设板块中的该评分项已通过核查，当前未发现异常。"
-            suggestion = "特殊作业功能建设板块总结建议：\n- 建议继续保持该功能的正常配置和使用。"
+            summary = "评估总结：特殊作业功能建设维度中的该评分项已通过核查，当前未发现异常。"
+            suggestion = "特殊作业功能建设维度总结建议：\n- 建议继续保持该功能的正常配置和使用。"
         elif state == "数据不足":
-            summary = "情况总结：特殊作业功能建设板块中的该评分项因数据不足，暂无法完整判断实际建设情况。"
-            suggestion = "特殊作业功能建设板块总结建议：\n- 建议补齐该功能的相关数据后重新核查。"
+            summary = "评估总结：特殊作业功能建设维度中的该评分项因数据不足，暂无法完整判断实际建设情况。"
+            suggestion = "特殊作业功能建设维度总结建议：\n- 建议补齐该功能的相关数据后重新核查。"
         else:
-            summary = "情况总结：特殊作业功能建设板块中的该评分项存在异常，具体问题已列在原因中。"
-            suggestion = "特殊作业功能建设板块总结建议：\n- 建议根据上述原因及时完善该功能，并在修复后复核评分。"
+            summary = "评估总结：特殊作业功能建设维度中的该评分项存在异常，具体问题已列在原因中。"
+            suggestion = "特殊作业功能建设维度总结建议：\n- 建议根据上述原因及时完善该功能，并在修复后复核评分。"
         return ToolResult(
             result.ok,
             f"【特殊作业单项评估】\n{body}\n\n{summary}\n{suggestion}",

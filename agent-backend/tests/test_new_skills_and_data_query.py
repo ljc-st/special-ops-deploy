@@ -1,5 +1,6 @@
 import pytest
 
+from app.graph.prompts import OUTPUT_CONTRACT
 from app.llm.client import ToolCall
 from app.tools.protocol import ExecContext, ToolResult
 from app.tools.skills import SkillExecutor
@@ -51,6 +52,14 @@ def test_score_format_preserves_zero_and_missing_values():
     assert _score_text({'score': '0/3'}) == '0.00 / 3.00'
 
 
+def test_output_contract_uses_full_user_facing_names():
+    assert '评估总结：' in OUTPUT_CONTRACT
+    assert '特殊作业功能建设维度' in OUTPUT_CONTRACT
+    assert '特殊作业数据质量维度' in OUTPUT_CONTRACT
+    assert '特殊作业应用成效维度' in OUTPUT_CONTRACT
+    assert '特殊作业报备数据、特殊作业票数据、特殊作业抽查数据' in OUTPUT_CONTRACT
+
+
 def test_function_build_format_unwraps_java_data_and_hides_internal_code():
     result = ToolResult(True, '', raw={'data': [{
         'itemNo': 'special-functionBuild-report',
@@ -63,8 +72,10 @@ def test_function_build_format_unwraps_java_data_and_hides_internal_code():
     formatted = format_special_result('special_report_function_build', result)
     assert '0.00 / 3.00' in formatted.observation
     assert 'special-functionBuild-report' not in formatted.observation
-    assert '情况总结：特殊作业功能建设板块' in formatted.observation
-    assert '特殊作业功能建设板块总结建议：' in formatted.observation
+    assert '评估总结：特殊作业功能建设维度' in formatted.observation
+    assert '特殊作业功能建设维度总结建议：' in formatted.observation
+    assert '情况总结：' not in formatted.observation
+    assert '板块' not in formatted.observation
 
 
 def test_dimension_summary_uses_full_special_operation_name():
@@ -82,9 +93,11 @@ def test_dimension_summary_uses_full_special_operation_name():
         } for index in range(1, 4)],
     })
     formatted = format_special_result('special_data_quality_evaluation', result)
-    assert '情况总结：特殊作业数据质量板块共核查3项' in formatted.observation
-    assert '特殊作业数据质量板块总结建议：' in formatted.observation
+    assert '评估总结：特殊作业数据质量维度共核查3项' in formatted.observation
+    assert '特殊作业数据质量维度总结建议：' in formatted.observation
     assert '\n数据质量总结建议：' not in formatted.observation
+    assert '情况总结：' not in formatted.observation
+    assert '板块' not in formatted.observation
 
 
 def test_application_effect_penalty_rows_and_note_are_user_facing():
