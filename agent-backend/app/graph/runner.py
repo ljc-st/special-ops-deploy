@@ -232,6 +232,8 @@ def _normalize_answer_markup(text: str) -> str:
     # 这是内部联调信息，不能出现在面向用户的评分结果中。
     value = re.sub(r"本轮\s*Java\s*接口返回评分项\s*[：:]\s*\d+\s*项\s*[。．.]?", "", value)
     value = value.replace("无法完成计算", "无法完成评估")
+    # 单项查询不向用户展示内部评分序号（例如 1.1、2.3）。
+    value = re.sub(r"(?m)^\s*\d+(?:\.\d+)+[ \t]+", "", value)
     return re.sub(r"\*\*([^*\n]+)\*\*", r"\1", value)
 
 

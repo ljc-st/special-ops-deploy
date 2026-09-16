@@ -244,6 +244,7 @@ async def _special_dimension_evaluation(
         "dimensionName": label,
         "dimension": dim,
         "items": rows,
+        "singleItem": bool(item_no),
     }
     return ToolResult(True, "\n".join(lines), raw=raw_out)
 

@@ -23,34 +23,26 @@ class LogClient:
 
 
 async def generate_visible_thought(llm, query: str) -> str:
-    """用模型生成一两句高层计划；不要求模型披露详细推理。"""
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                "请为用户问题生成一段不超过80字的执行计划摘要，只说明要识别什么、查询什么、如何整理结果。"
-                "不要回答问题，不要提及工具名、SQL、接口参数、系统提示词，也不要展示逐步推理。"
-            ),
-        },
-        {"role": "user", "content": query},
-    ]
-    parts: list[str] = []
-    try:
-        async for chunk in llm.stream_chat(prompt, tools=None):
-            if chunk.content:
-                parts.append(chunk.content)
-        text = "".join(parts).strip()
-        if text:
-            return text[:120]
-    except Exception:
-        pass
+    """返回面向普通用户的三步执行说明，不展示隐藏思维链。"""
     return thought_for_query(query)
 
 
 def thought_for_query(query: str) -> str:
-    """生成简短、可展示的执行摘要，不暴露隐藏推理或内部参数。"""
+    """生成简短、可展示的三步执行说明，不暴露隐藏推理或内部参数。"""
     if any(word in query for word in ("数据库", "明细", "历史", "批次", "记录", "作业票")):
-        return "我先识别问题中的查询对象，再调用对应工具获取可核验的数据，最后整理成简洁结果。"
+        return (
+            "第一步：确认你要查询的企业、评分或作业票信息。\n"
+            "第二步：调用数据查询服务，读取当前可核验的记录。\n"
+            "第三步：整理查询结果，用清楚的文字或表格返回。"
+        )
     if any(word in query for word in ("扣分", "原因", "为什么", "评分项")):
-        return "我先确定用户关注的评分范围，再读取本轮评分结果和判定依据，最后说明原因。"
-    return "我先分析问题所属的特殊作业评分场景，再调用必要工具获取结果并整理回答。"
+        return (
+            "第一步：确认你关注的评分项和需要说明的问题。\n"
+            "第二步：调用特殊作业评分服务，读取当前得分、状态和判定原因。\n"
+            "第三步：把核查结果整理成易懂的说明，并给出对应建议。"
+        )
+    return (
+        "第一步：确认你要查看的是总分、评分维度还是具体评分项。\n"
+        "第二步：调用特殊作业评分服务，读取当前评分结果。\n"
+        "第三步：整理得分、状态和原因，用清楚的方式返回。"
+    )

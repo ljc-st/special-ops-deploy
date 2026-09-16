@@ -210,7 +210,7 @@ def _html_table(rows: list[dict], include_sequence: bool = True) -> str:
     headers = ["序号", "评分项", "得分", "状态", "原因"] if include_sequence else ["评分项", "票号/票据", "企业", "问题原因"]
     widths = (["72px", "280px", "140px", "120px", "560px"] if include_sequence
               else ["280px", "280px", "280px", "600px"])
-    centered = {"序号", "得分", "状态"}
+    centered = {"序号", "评分项", "得分", "状态"}
     head_html = "".join(
         f'<th style="{head_border}{cell}min-width:{widths[index]};text-align:{"center" if label in centered else "left"};color:#eef7ff;font-weight:700;">{_html_escape(label)}</th>'
         for index, label in enumerate(headers)
@@ -257,6 +257,21 @@ def _dimension_summary(items: list[dict], label: str) -> list[str]:
         summary = f"评估总结：{label}共核查{len(items)}项，其中{passed}项通过、{problem}项存在问题或数据不足，问题主要集中在数据覆盖、更新及时性或字段完整性方面。"
         suggestions = [f"- 建议优先补齐{label}中未覆盖或数据不足的评分项。", "- 建议持续更新相关业务数据，并定期复核异常项。"]
     return [summary, f"{label}总结建议：", *suggestions]
+
+
+def _single_item_summary(item_name: str, status: str) -> list[str]:
+    """单项查询只围绕当前评分项总结，不重复输出所属维度名称。"""
+    name = item_name or "该评分项"
+    if status == "通过":
+        summary = f"评估总结：{name}已通过核查，当前未发现异常。"
+        suggestions = [f"{name}总结建议：", "- 建议继续保持该项相关数据的正常更新和使用。"]
+    elif status == "数据不足":
+        summary = f"评估总结：{name}因评分所需数据不足，暂无法完成完整评估。"
+        suggestions = [f"{name}总结建议：", "- 建议补齐该项所需数据后重新核查。"]
+    else:
+        summary = f"评估总结：{name}存在异常，具体问题已列在原因中。"
+        suggestions = [f"{name}总结建议：", "- 建议根据上述原因及时完善，修复后重新核查。"]
+    return [summary, *suggestions]
 
 
 def _status_text(status: object) -> str:
@@ -344,18 +359,10 @@ def format_special_result(skill_name: str, result: ToolResult) -> ToolResult:
         detail = _detail(data)
         if detail:
             body += f"\n原因：{detail}"
-        if state == "通过":
-            summary = "评估总结：特殊作业功能建设维度中的该评分项已通过核查，当前未发现异常。"
-            suggestion = "特殊作业功能建设维度总结建议：\n- 建议继续保持该功能的正常配置和使用。"
-        elif state == "数据不足":
-            summary = "评估总结：特殊作业功能建设维度中的该评分项因数据不足，暂无法完整判断实际建设情况。"
-            suggestion = "特殊作业功能建设维度总结建议：\n- 建议补齐该功能的相关数据后重新核查。"
-        else:
-            summary = "评估总结：特殊作业功能建设维度中的该评分项存在异常，具体问题已列在原因中。"
-            suggestion = "特殊作业功能建设维度总结建议：\n- 建议根据上述原因及时完善该功能，并在修复后复核评分。"
+        summary_lines = _single_item_summary(item_name, state)
         return ToolResult(
             result.ok,
-            f"【特殊作业单项评估】\n{body}\n\n{summary}\n{suggestion}",
+            f"【特殊作业单项评估】\n{body}\n\n" + "\n".join(summary_lines),
             raw=raw,
             error_code=result.error_code,
         )
@@ -373,24 +380,33 @@ def format_special_result(skill_name: str, result: ToolResult) -> ToolResult:
         )
         lines = [
             f"【特殊作业{title}】",
-            f"{label} {_ratio_text(dim.get('score', '-'), dim.get('maxScore', '-'), ' 分')}",
         ]
         items = data.get("items") or []
         if items:
-            if len(items) >= 3:
+            if data.get("singleItem"):
+                item = items[0]
+                item_name = _score_item_cell(item.get("itemNo"), item.get("itemName"))
+                state = _status_text(item.get("status"))
+                lines.append(f"{item_name}：{_score_text(item)}，{state}")
+                lines.append(f"原因：{_detail(item)}")
+                lines.extend(["", *_single_item_summary(item_name, state)])
+            elif len(items) >= 3:
+                lines.insert(1, f"{label} {_ratio_text(dim.get('score', '-'), dim.get('maxScore', '-'), ' 分')}")
                 lines.append("")
                 lines.append(_html_table(items))
                 if skill_name == "special_application_effect_evaluation":
                     lines.append(_application_effect_note())
             else:
+                lines.insert(1, f"{label} {_ratio_text(dim.get('score', '-'), dim.get('maxScore', '-'), ' 分')}")
                 for index, it in enumerate(items, 1):
                     state = _status_text(it.get("status"))
                     lines.append(
-                        f"- {index} "
+                        f"- "
                         f"{_score_item_cell(it.get('itemNo'), it.get('itemName'))}："
                         f"{_score_text(it)}，{state}；原因：{_detail(it)}"
                     )
-            lines.extend(["", *_dimension_summary(items, label)])
+            if not data.get("singleItem"):
+                lines.extend(["", *_dimension_summary(items, label)])
         return ToolResult(result.ok, "\n".join(lines), raw=raw, error_code=result.error_code)
 
     if skill_name == "special_item_search":
@@ -407,7 +423,11 @@ def format_special_result(skill_name: str, result: ToolResult) -> ToolResult:
         if data:
             item_name = _score_item_cell(data.get("itemNo"), data.get("itemName"))
             state = _status_text(data.get("status"))
-            text = f"【特殊作业单项详情】\n{item_name}：{_score_text(data)}，{state}\n原因：{_detail(data)}"
+            text = (
+                f"【特殊作业单项详情】\n{item_name}：{_score_text(data)}，{state}"
+                f"\n原因：{_detail(data)}\n\n"
+                + "\n".join(_single_item_summary(item_name, state))
+            )
             return ToolResult(result.ok, text, raw=raw, error_code=result.error_code)
         return result
 

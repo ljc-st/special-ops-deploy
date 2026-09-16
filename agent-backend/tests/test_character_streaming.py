@@ -16,7 +16,7 @@ def test_score_table_uses_adaptive_width_and_semantic_alignment():
     }])
     assert "width:max-content;min-width:100%" in table
     assert "min-width:72px;text-align:center" in table
-    assert "min-width:280px;text-align:left" in table
+    assert "min-width:280px;text-align:center" in table
     assert "min-width:140px;text-align:center" in table
     assert "overflow-x:auto" in table
 
