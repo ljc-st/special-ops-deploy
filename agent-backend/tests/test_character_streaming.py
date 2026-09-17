@@ -1,7 +1,7 @@
 import pytest
 
 from app.api.schemas import ChatRequest
-from app.graph.runner import _render_table_html
+from app.graph.runner import _normalize_answer_markup, _render_table_html
 from app.tools.score_format import _html_table
 
 
@@ -18,7 +18,32 @@ def test_score_table_uses_adaptive_width_and_semantic_alignment():
     assert "min-width:72px;text-align:center" in table
     assert "min-width:280px;text-align:center" in table
     assert "min-width:140px;text-align:center" in table
+    assert "min-width:560px;text-align:center" in table
     assert "overflow-x:auto" in table
+
+
+def test_score_reason_alignment_depends_on_whole_column_length():
+    short_table = _render_table_html([
+        "| 序号 | 评分项 | 得分 | 状态 | 原因 |\n",
+        "|---|---|---|---|---|\n",
+        "| 1 | 报备评估 | 0/3 | 数据不足 | 评分所需数据不足 |\n",
+        "| 2 | 作业票评估 | 0/3 | 数据不足 | 评分所需数据不足 |\n",
+    ])
+    assert "min-width:280px;text-align:center" in short_table
+    assert "min-width:560px;text-align:center" in short_table
+
+    long_table = _render_table_html([
+        "| 序号 | 评分项 | 得分 | 状态 | 原因 |\n",
+        "|---|---|---|---|---|\n",
+        "| 1 | 报备评估 | 0/3 | 数据不足 | 评分所需数据不足 |\n",
+        "| 2 | 作业票评估 | 0/3 | 数据不足 | 该项评分所需数据不足，且包含较长的企业覆盖率、更新时间和字段完整性说明，需要左对齐展示 |\n",
+    ])
+    assert "min-width:560px;text-align:left" in long_table
+
+
+def test_old_summary_labels_are_normalized_to_module():
+    text = _normalize_answer_markup("情况总结：特殊作业功能建设板块共核查3项。")
+    assert text == "评估总结：特殊作业功能建设模块共核查3项。"
 
 
 def test_generic_table_supports_more_than_four_columns():

@@ -122,9 +122,9 @@ def test_score_format_preserves_zero_and_missing_values():
 
 def test_output_contract_uses_full_user_facing_names():
     assert '评估总结：' in OUTPUT_CONTRACT
-    assert '特殊作业功能建设维度' in OUTPUT_CONTRACT
-    assert '特殊作业数据质量维度' in OUTPUT_CONTRACT
-    assert '特殊作业应用成效维度' in OUTPUT_CONTRACT
+    assert '特殊作业功能建设模块' in OUTPUT_CONTRACT
+    assert '特殊作业数据质量模块' in OUTPUT_CONTRACT
+    assert '特殊作业应用成效模块' in OUTPUT_CONTRACT
     assert '特殊作业报备数据、特殊作业票数据、特殊作业抽查数据' in OUTPUT_CONTRACT
 
 
@@ -143,7 +143,7 @@ def test_function_build_format_unwraps_java_data_and_hides_internal_code():
     assert '评估总结：特殊作业报备功能建设情况评估' in formatted.observation
     assert '特殊作业报备功能建设情况评估总结建议：' in formatted.observation
     assert '情况总结：' not in formatted.observation
-    assert '特殊作业功能建设维度' not in formatted.observation
+    assert '特殊作业功能建设模块' not in formatted.observation
 
 
 def test_dimension_summary_uses_full_special_operation_name():
@@ -161,8 +161,8 @@ def test_dimension_summary_uses_full_special_operation_name():
         } for index in range(1, 4)],
     })
     formatted = format_special_result('special_data_quality_evaluation', result)
-    assert '评估总结：特殊作业数据质量维度共核查3项' in formatted.observation
-    assert '特殊作业数据质量维度总结建议：' in formatted.observation
+    assert '评估总结：特殊作业数据质量模块共核查3项' in formatted.observation
+    assert '特殊作业数据质量模块总结建议：' in formatted.observation
     assert '\n数据质量总结建议：' not in formatted.observation
     assert '情况总结：' not in formatted.observation
     assert '板块' not in formatted.observation
@@ -185,7 +185,7 @@ def test_single_dimension_item_summary_uses_item_name_only():
     })
     formatted = format_special_result('special_data_quality_evaluation', result)
     assert '评估总结：特殊作业数据完整性评估' in formatted.observation
-    assert '特殊作业数据质量维度' not in formatted.observation
+    assert '特殊作业数据质量模块' not in formatted.observation
     assert '1.1' not in formatted.observation
 
 

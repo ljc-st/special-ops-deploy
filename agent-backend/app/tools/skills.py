@@ -253,7 +253,7 @@ async def _special_data_quality_evaluation(
     args: dict, ctx: ExecContext, run: ToolRunner
 ) -> ToolResult:
     return await _special_dimension_evaluation(
-        "dataQuality", "特殊作业数据质量维度", ctx, run, args.get("itemNo")
+        "dataQuality", "特殊作业数据质量模块", ctx, run, args.get("itemNo")
     )
 
 
@@ -261,7 +261,7 @@ async def _special_application_effect_evaluation(
     args: dict, ctx: ExecContext, run: ToolRunner
 ) -> ToolResult:
     return await _special_dimension_evaluation(
-        "applicationEffect", "特殊作业应用成效维度", ctx, run, args.get("itemNo")
+        "applicationEffect", "特殊作业应用成效模块", ctx, run, args.get("itemNo")
     )
 
 

@@ -89,20 +89,23 @@ _ITEM_CODE_NAMES = {
 }
 
 _DIMENSION_DISPLAY_NAMES = {
-    "functionBuild": "特殊作业功能建设维度",
-    "功能建设": "特殊作业功能建设维度",
-    "特殊作业功能建设": "特殊作业功能建设维度",
-    "特殊作业功能建设板块": "特殊作业功能建设维度",
-    "dataQuality": "特殊作业数据质量维度",
-    "数据质量": "特殊作业数据质量维度",
-    "数据质量评估": "特殊作业数据质量维度",
-    "特殊作业数据质量": "特殊作业数据质量维度",
-    "特殊作业数据质量板块": "特殊作业数据质量维度",
-    "applicationEffect": "特殊作业应用成效维度",
-    "应用成效": "特殊作业应用成效维度",
-    "应用成效评估": "特殊作业应用成效维度",
-    "特殊作业应用成效": "特殊作业应用成效维度",
-    "特殊作业应用成效板块": "特殊作业应用成效维度",
+    "functionBuild": "特殊作业功能建设模块",
+    "功能建设": "特殊作业功能建设模块",
+    "特殊作业功能建设": "特殊作业功能建设模块",
+    "特殊作业功能建设板块": "特殊作业功能建设模块",
+    "特殊作业功能建设维度": "特殊作业功能建设模块",
+    "dataQuality": "特殊作业数据质量模块",
+    "数据质量": "特殊作业数据质量模块",
+    "数据质量评估": "特殊作业数据质量模块",
+    "特殊作业数据质量": "特殊作业数据质量模块",
+    "特殊作业数据质量板块": "特殊作业数据质量模块",
+    "特殊作业数据质量维度": "特殊作业数据质量模块",
+    "applicationEffect": "特殊作业应用成效模块",
+    "应用成效": "特殊作业应用成效模块",
+    "应用成效评估": "特殊作业应用成效模块",
+    "特殊作业应用成效": "特殊作业应用成效模块",
+    "特殊作业应用成效板块": "特殊作业应用成效模块",
+    "特殊作业应用成效维度": "特殊作业应用成效模块",
 }
 
 
@@ -116,7 +119,7 @@ def _full_dimension_name(value: object, code: object = "") -> str:
         return _DIMENSION_DISPLAY_NAMES[raw]
     if raw.startswith("特殊作业"):
         return raw
-    return f"特殊作业{raw}维度" if raw else "特殊作业评分维度"
+    return f"特殊作业{raw}模块" if raw else "特殊作业评分模块"
 
 
 def _score_sequence(item_no: object, item_name: object) -> str:
@@ -211,6 +214,15 @@ def _html_table(rows: list[dict], include_sequence: bool = True) -> str:
     widths = (["72px", "280px", "140px", "120px", "560px"] if include_sequence
               else ["280px", "280px", "280px", "600px"])
     centered = {"序号", "评分项", "得分", "状态"}
+    reason_header = "原因" if include_sequence else "问题原因"
+    reason_values = [
+        _detail(row) if include_sequence else str(row.get("reason") or "-")
+        for row in rows
+    ]
+    reason_lengths = [len(value.strip()) for value in reason_values if value.strip()]
+    # 原因内容长度一致且较短时居中；存在长文本时整列左对齐，保持易读。
+    if reason_lengths and len(set(reason_lengths)) == 1 and max(reason_lengths) <= 30:
+        centered.add(reason_header)
     head_html = "".join(
         f'<th style="{head_border}{cell}min-width:{widths[index]};text-align:{"center" if label in centered else "left"};color:#eef7ff;font-weight:700;">{_html_escape(label)}</th>'
         for index, label in enumerate(headers)

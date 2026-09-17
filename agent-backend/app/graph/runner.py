@@ -152,7 +152,18 @@ def _render_table_html(table_lines: list[str]) -> str:
         "问题原因": "600px",
     }
     widths = [width_by_header.get(str(label), "220px") for label in headers]
-    centered = {"序号", "得分", "状态", "数量"}
+    centered = {"序号", "评分项", "得分", "状态", "数量"}
+    for reason_header in ("原因", "问题原因"):
+        if reason_header not in headers:
+            continue
+        reason_index = headers.index(reason_header)
+        reason_lengths = [
+            len(str(row[reason_index]).strip())
+            for row in body
+            if len(row) > reason_index and str(row[reason_index]).strip()
+        ]
+        if reason_lengths and len(set(reason_lengths)) == 1 and max(reason_lengths) <= 30:
+            centered.add(reason_header)
     head_border = "border:0;border-top:1px solid #6baee2;border-bottom:1px solid #6baee2;"
     cell = "padding:8px 12px;vertical-align:top;font-family:inherit;font-size:16px;line-height:1.6;white-space:nowrap;word-break:normal;overflow-wrap:normal;writing-mode:horizontal-tb;"
     head_html = "".join(
@@ -232,6 +243,10 @@ def _normalize_answer_markup(text: str) -> str:
     # 这是内部联调信息，不能出现在面向用户的评分结果中。
     value = re.sub(r"本轮\s*Java\s*接口返回评分项\s*[：:]\s*\d+\s*项\s*[。．.]?", "", value)
     value = value.replace("无法完成计算", "无法完成评估")
+    value = value.replace("情况总结：", "评估总结：")
+    value = value.replace("功能建设板块", "功能建设模块").replace("功能建设维度", "功能建设模块")
+    value = value.replace("数据质量板块", "数据质量模块").replace("数据质量维度", "数据质量模块")
+    value = value.replace("应用成效板块", "应用成效模块").replace("应用成效维度", "应用成效模块")
     # 单项查询不向用户展示内部评分序号（例如 1.1、2.3）。
     value = re.sub(r"(?m)^\s*\d+(?:\.\d+)+[ \t]+", "", value)
     return re.sub(r"\*\*([^*\n]+)\*\*", r"\1", value)
