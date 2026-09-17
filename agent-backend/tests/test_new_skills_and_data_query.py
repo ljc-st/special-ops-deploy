@@ -1,5 +1,6 @@
 import pytest
 
+from app.data_query import ReadOnlySQLDataQueryService, SCORE_RESULT_TABLES
 from app.graph.prompts import OUTPUT_CONTRACT
 from app.log_client import thought_for_query
 from app.llm.client import ToolCall
@@ -42,6 +43,72 @@ async def test_database_query_is_safe_before_credentials_are_configured():
     assert not result.ok
     assert result.error_code == 'DATA_QUERY_NOT_CONFIGURED'
     assert '数据库' in result.observation
+
+
+def test_company_query_uses_fixed_safe_columns():
+    service = ReadOnlySQLDataQueryService(allowed_tables=set(SCORE_RESULT_TABLES), max_rows=50)
+    sql = service._build_query('查询当前数据库中的企业信息', '')
+    assert 'SELECT *' not in sql
+    assert 'c.company_name AS `企业名称`' in sql
+    assert 'c.social_credit_code AS `统一社会信用代码`' in sql
+    assert "c.deleted = '0'" in sql
+    assert 'LIMIT 50' in sql
+    assert 'duty_phone' not in sql
+    assert 'address_registry' not in sql
+
+
+def test_company_issue_query_joins_company_information_by_business_id():
+    service = ReadOnlySQLDataQueryService(allowed_tables=set(SCORE_RESULT_TABLES))
+    sql = service._build_query('查询存在评分问题的企业', '')
+    assert 'JOIN das_company_info c ON c.id = e.entity_id' in sql
+    assert "LOWER(e.entity_type) = 'company'" in sql
+    assert "r.module = 'special'" in sql
+    assert "c.deleted = '0'" in sql
+    assert 'i.item_name AS `评分项`' in sql
+
+
+def test_work_ticket_result_query_joins_company_information():
+    service = ReadOnlySQLDataQueryService(allowed_tables=set(SCORE_RESULT_TABLES))
+    sql = service._build_query('查询企业关联的作业票评判结果', '')
+    assert 'FROM das_work_ticket_evaluate_result w' in sql
+    assert 'JOIN das_company_info c ON c.id = w.company_id' in sql
+    assert "w.deleted = '0'" in sql
+    assert "c.deleted = '0'" in sql
+    assert 'c.company_name AS `企业名称`' in sql
+    assert 'w.ticket_id AS `作业票编号`' in sql
+
+
+def test_join_validation_requires_every_table_to_be_whitelisted():
+    valid_sql = (
+        'SELECT c.company_name FROM das_score_issue_entity e '
+        'JOIN das_company_info c ON c.id = e.entity_id'
+    )
+    valid, _ = ReadOnlySQLDataQueryService.validate_select(valid_sql, set(SCORE_RESULT_TABLES))
+    assert valid
+    invalid, reason = ReadOnlySQLDataQueryService.validate_select(
+        valid_sql + ' JOIN private_account p ON p.id = c.id', set(SCORE_RESULT_TABLES)
+    )
+    assert not invalid
+    assert '未授权' in reason
+
+
+def test_company_query_result_uses_fixed_html_list_layout():
+    result = ToolResult(True, '', raw={
+        'columns': ['企业名称', '企业简称', '统一社会信用代码', '生产状态', '安全风险等级'],
+        'rows': [{
+            '企业名称': '示例化工有限公司',
+            '企业简称': '示例化工',
+            '统一社会信用代码': '913200000000000000',
+            '生产状态': '1',
+            '安全风险等级': '2',
+        }],
+    })
+    formatted = format_special_result('special_data_query', result)
+    assert '<th ' in formatted.observation
+    assert '>序号</th>' in formatted.observation
+    assert '>企业名称</th>' in formatted.observation
+    assert '示例化工有限公司' in formatted.observation
+    assert 'overflow-x:auto' in formatted.observation
 
 
 def test_score_format_preserves_zero_and_missing_values():

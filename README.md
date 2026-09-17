@@ -89,6 +89,10 @@ special-ops-deploy/
 7. **special_score_drilldown**: 扣分项分析
 8. **special_ticket_issue**: 问题票据查询
 
+### 企业信息关联
+
+智能问数白名单包含 `das_company_info`。企业基础信息通过该表查询；特殊作业评分问题按 `das_score_issue_entity.entity_id = das_company_info.id` 关联，作业票评判结果按 `das_work_ticket_evaluate_result.company_id = das_company_info.id` 关联。关联查询仅返回有效数据，并以企业名称替代内部企业编号。
+
 ## 接口规范
 
 当前版本适配 **系统评分接口规范 v3**：

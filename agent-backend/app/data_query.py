@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import asyncio
 import httpx
+import re
 from typing import Protocol
 
 
@@ -58,16 +59,21 @@ class ReadOnlySQLDataQueryService:
         forbidden = ("insert ", "update ", "delete ", "drop ", "alter ", "truncate ", "create ", "grant ", ";", "--", "/*")
         if any(token in normalized for token in forbidden):
             return False, "查询包含被禁止的写入或多语句操作"
-        if allowed_tables and not any(f" {table.lower()} " in f" {normalized} " for table in allowed_tables):
+        referenced_tables = set(
+            re.findall(r"\b(?:from|join)\s+`?([a-z0-9_]+)`?", normalized)
+        )
+        allowed = {table.lower() for table in allowed_tables}
+        if not referenced_tables or (allowed and not referenced_tables.issubset(allowed)):
             return False, "查询涉及未授权的数据表"
         return True, ""
 
     async def ask(self, question: str, table_hint: str = "") -> DataQueryResult:
-        table = self._choose_table(question, table_hint)
-        if not table:
+        sql = self._build_query(question, table_hint)
+        if not sql:
             return DataQueryResult(False, "暂不支持该类数据库查询，请查询评分结果、问题票据或企业明细。", [], [], "DATA_QUERY_UNSUPPORTED")
-        # 白名单表结构并不统一，不能假设所有表都有 deleted 字段；网关本身只读，直接限制行数。
-        sql = f"SELECT * FROM `{table}` LIMIT {self._max_rows}"
+        valid, reason = self.validate_select(sql, self._allowed_tables)
+        if not valid:
+            return DataQueryResult(False, reason, [], [], "DATA_QUERY_FORBIDDEN")
         try:
             if self._gateway_url:
                 async with httpx.AsyncClient(timeout=20.0) as client:
@@ -77,11 +83,74 @@ class ReadOnlySQLDataQueryService:
                 if not payload.get("ok"):
                     return DataQueryResult(False, "数据库查询暂时不可用，请稍后重试。", [], [], "DATA_QUERY_FAILED")
                 columns = [str(c) for c in payload.get("cols", [])]
-                rows = [dict(zip(columns, [str(v) for v in row])) for row in payload.get("rows", [])]
+                rows = [
+                    dict(zip(columns, ["" if value is None else str(value) for value in row]))
+                    for row in payload.get("rows", [])
+                ]
                 return DataQueryResult(True, f"已查询到 {len(rows)} 条数据库记录。", columns, rows)
             return await asyncio.to_thread(self._execute, sql, ())
         except Exception:
             return DataQueryResult(False, "数据库查询暂时不可用，请稍后重试。", [], [], "DATA_QUERY_FAILED")
+
+    def _build_query(self, question: str, table_hint: str) -> str:
+        """按用户意图生成应用内预置的只读查询，不接受用户提供 SQL。"""
+        text = str(question or "")
+        hint = str(table_hint or "").strip().lower()
+        company_words = ("企业", "公司")
+        issue_words = ("评分", "得分", "扣分", "问题", "异常", "原因")
+        ticket_words = ("作业票", "票据", "评判结果", "评判记录")
+        asks_company_ticket = (
+            any(word in text for word in company_words)
+            and any(word in text for word in ticket_words)
+        ) or (hint == "das_work_ticket_evaluate_result" and any(word in text for word in company_words))
+        asks_company_issue = (
+            any(word in text for word in company_words)
+            and any(word in text for word in issue_words)
+        ) or (hint == "das_score_issue_entity" and any(word in text for word in company_words))
+
+        if asks_company_ticket:
+            return (
+                "SELECT c.company_name AS `企业名称`, w.ticket_id AS `作业票编号`, "
+                "w.ticket_type AS `作业类型`, "
+                "CASE WHEN w.is_passed = 1 THEN '通过' ELSE '未通过' END AS `评判结果`, "
+                "COALESCE(NULLIF(w.failed_detail, ''), '未返回问题原因') AS `问题原因`, "
+                "DATE_FORMAT(w.evaluate_time, '%Y-%m-%d %H:%i:%s') AS `评判时间` "
+                "FROM das_work_ticket_evaluate_result w "
+                "JOIN das_company_info c ON c.id = w.company_id AND c.deleted = '0' "
+                "WHERE w.deleted = '0' "
+                "ORDER BY w.evaluate_time DESC "
+                f"LIMIT {self._max_rows}"
+            )
+
+        if asks_company_issue:
+            return (
+                "SELECT c.company_name AS `企业名称`, i.item_name AS `评分项`, "
+                "CONCAT(CAST(i.score AS CHAR), ' / ', CAST(i.max_score AS CHAR)) AS `得分`, "
+                "COALESCE(NULLIF(i.issue_desc, ''), '未返回问题原因') AS `问题原因`, "
+                "DATE_FORMAT(r.eval_time, '%Y-%m-%d %H:%i:%s') AS `评分时间` "
+                "FROM das_score_issue_entity e "
+                "JOIN das_company_info c ON c.id = e.entity_id AND c.deleted = '0' "
+                "JOIN das_score_issue i ON i.id = e.issue_id "
+                "JOIN das_score_result r ON r.id = i.result_id AND r.deleted = '0' "
+                "WHERE LOWER(e.entity_type) = 'company' AND r.module = 'special' "
+                "ORDER BY r.eval_time DESC, i.sort_order ASC, e.sort_order ASC "
+                f"LIMIT {self._max_rows}"
+            )
+
+        if hint == "das_company_info" or any(
+            word in text for word in ("企业信息", "企业列表", "有哪些企业", "公司信息")
+        ):
+            return (
+                "SELECT c.company_name AS `企业名称`, "
+                "COALESCE(c.company_short_name, '') AS `企业简称`, "
+                "c.social_credit_code AS `统一社会信用代码`, "
+                "c.produce_status AS `生产状态`, c.src_result AS `安全风险等级` "
+                "FROM das_company_info c WHERE c.deleted = '0' "
+                f"ORDER BY c.company_name ASC LIMIT {self._max_rows}"
+            )
+
+        table = self._choose_table(text, hint)
+        return f"SELECT * FROM `{table}` LIMIT {self._max_rows}" if table else ""
 
     def _choose_table(self, question: str, table_hint: str) -> str:
         hint = str(table_hint or "").strip().lower()
@@ -119,7 +188,7 @@ class ReadOnlySQLDataQueryService:
             connection.close()
 
 
-# 结果表说明中明确列出的可查询表白名单；默认只允许这些结果/票据快照表。
+# 说明文档中明确列出的查询白名单；只允许企业、评分结果及票据快照表。
 SCORE_RESULT_TABLES = frozenset({
     "das_company_info",
     "das_score_batch_sequence",

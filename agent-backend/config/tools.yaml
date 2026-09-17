@@ -100,7 +100,7 @@ tools:
     parameters: {}
 
   - name: special_data_query
-    description: 只读智能问数技能入口。根据数据库表说明查询企业基础信息、评分结果或作业票评判明细；当前未配置数据库时必须明确说明不能读取，禁止让模型自行拼接或执行 SQL
+    description: 只读智能问数技能入口。根据数据库表说明查询企业基础信息、企业关联的特殊作业评分问题、评分结果或作业票评判明细；企业评分问题通过 das_score_issue_entity.entity_id 与 das_company_info.id 关联，作业票评判结果通过 das_work_ticket_evaluate_result.company_id 与 das_company_info.id 关联。当前未配置数据库时必须明确说明不能读取，禁止让模型自行拼接或执行 SQL
     executor_type: skill
     skill_name: special_data_query
     parameters:

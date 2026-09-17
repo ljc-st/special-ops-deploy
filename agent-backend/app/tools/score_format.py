@@ -291,6 +291,51 @@ def _application_effect_note() -> str:
     )
 
 
+def _data_query_table(columns: list[object], rows: list[dict]) -> str:
+    """数据库问数使用固定顺序的用户侧列表，不展示内部字段。"""
+    visible_columns = [str(column) for column in columns]
+    headers = ["序号", *visible_columns]
+    widths = {
+        "序号": "72px",
+        "企业名称": "280px",
+        "企业简称": "180px",
+        "统一社会信用代码": "220px",
+        "生产状态": "120px",
+        "安全风险等级": "140px",
+        "评分项": "280px",
+        "得分": "140px",
+        "问题原因": "560px",
+        "评分时间": "190px",
+        "作业票编号": "280px",
+        "作业类型": "120px",
+        "评判结果": "120px",
+        "评判时间": "190px",
+    }
+    centered = {
+        "序号", "统一社会信用代码", "生产状态", "安全风险等级", "得分",
+        "评分时间", "作业类型", "评判结果", "评判时间",
+    }
+    cell = "padding:8px 12px;vertical-align:top;font-family:inherit;font-size:16px;line-height:1.6;white-space:nowrap;word-break:normal;overflow-wrap:normal;writing-mode:horizontal-tb;"
+    head_border = "border:0;border-top:1px solid #6baee2;border-bottom:1px solid #6baee2;"
+    head_html = "".join(
+        f'<th style="{head_border}{cell}min-width:{widths.get(header, "180px")};text-align:{"center" if header in centered else "left"};color:#eef7ff;font-weight:700;">{_html_escape(header)}</th>'
+        for header in headers
+    )
+    body_html: list[str] = []
+    for index, row in enumerate(rows, 1):
+        values = [str(index), *(row.get(column, "-") for column in visible_columns)]
+        cells = "".join(
+            f'<td style="border:0;border-bottom:1px solid rgba(142,193,230,.35);{cell}text-align:{"center" if headers[position] in centered else "left"};color:#d9eaff;">{_html_escape("-" if value is None or value == "" else str(value))}</td>'
+            for position, value in enumerate(values)
+        )
+        body_html.append(f"<tr>{cells}</tr>")
+    return (
+        '<div style="width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;margin:12px 0;scrollbar-width:thin;">'
+        '<table style="width:max-content;min-width:100%;border-collapse:collapse;table-layout:auto;">'
+        f"<thead><tr>{head_html}</tr></thead><tbody>{''.join(body_html)}</tbody></table></div>"
+    )
+
+
 def _table_cell(value: object) -> str:
     """防止详情文本中的换行或竖线破坏 Markdown 表格。"""
     text = "-" if value is None or value == "" else str(value)
@@ -461,10 +506,8 @@ def format_special_result(skill_name: str, result: ToolResult) -> ToolResult:
         rows = data.get("rows") or []
         if not rows:
             return ToolResult(result.ok, result.observation or "暂未找到可用数据。", raw=raw, error_code=result.error_code)
-        lines = ["【数据库查询明细】", "", "| " + " | ".join(_table_cell(c) for c in columns) + " |", "|" + "|".join("---" for _ in columns) + "|"]
-        for row in rows:
-            lines.append("| " + " | ".join(_table_cell(row.get(c)) for c in columns) + " |")
-        return ToolResult(result.ok, "\n".join(lines), raw=raw, error_code=result.error_code)
+        text = "【数据库查询明细】\n\n" + _data_query_table(columns, rows)
+        return ToolResult(result.ok, text, raw=raw, error_code=result.error_code)
 
     if skill_name == "special_ticket_issue":
         rows = [row for row in (raw if isinstance(raw, list) else []) if isinstance(row, dict)]

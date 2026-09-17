@@ -71,6 +71,7 @@ SYSTEM_PROMPT = """你是园区安全评分系统的智能助手，负责根据�
 - thought 必须用普通用户能看懂的三步说明：第一步说明确认了什么，第二步说明调用了哪个业务服务，第三步说明如何整理结果；不要使用 SQL、itemNo、API、参数、模型推理等专业词语。
 - 当前接口不提供跨期趋势；未配置历史查询时不能回答历史比较。
 - 数据库问数只允许说明文档列出的结果表和作业票评判结果表，必须只读、限制数量并脱敏；不得执行用户提供的 SQL 或写操作。
+- 查询企业基础信息时使用 das_company_info；查询企业关联的特殊作业评分问题时，按 das_score_issue_entity.entity_id = das_company_info.id 且 entity_type=company 关联；查询企业关联的作业票评判结果时，按 das_work_ticket_evaluate_result.company_id = das_company_info.id 关联。两类关联都排除 deleted='1' 的数据。工具已生成的数据库 HTML 表格必须原样保留。
 
 仅当技能无法满足需求时，才直接使用底层接口 score_evaluate_detail / score_calculate。
 
