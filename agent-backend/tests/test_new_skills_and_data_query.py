@@ -199,6 +199,29 @@ def test_visible_thought_is_three_plain_language_steps():
     assert thought.splitlines()[2].startswith('第三步：')
     assert 'SQL' not in thought
     assert 'itemNo' not in thought
+    assert '报备、作业票管理和作业抽查' in thought
+    assert '补充数据或继续完善' in thought
+
+
+def test_visible_thought_matches_business_scenarios():
+    data_quality = thought_for_query('特殊作业数据质量有哪些问题')
+    assert '是否存在、是否完整、是否重复' in data_quality
+    assert '特殊作业报备数据、特殊作业票数据和特殊作业抽查数据' in data_quality
+
+    ticket_issue = thought_for_query('哪些问题作业票需要处理')
+    assert '票号、所属企业和具体问题' in ticket_issue
+    assert '联系哪家企业' in ticket_issue
+
+    overview = thought_for_query('特殊作业总体评分怎么样')
+    assert '功能建设、数据质量和应用成效' in overview
+    assert '总体结果、主要问题、处理建议' in overview
+
+
+def test_work_ticket_function_build_is_not_mistaken_for_history_query():
+    thought = thought_for_query('请评估特殊作业票管理功能建设')
+    assert '特殊作业票管理功能建设情况' in thought
+    assert '本次只核查这一项' in thought
+    assert '历史评分' not in thought
 
 
 def test_application_effect_penalty_rows_and_note_are_user_facing():
