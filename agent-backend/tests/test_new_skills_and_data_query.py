@@ -139,6 +139,7 @@ def test_function_build_format_unwraps_java_data_and_hides_internal_code():
     }]})
     formatted = format_special_result('special_report_function_build', result)
     assert '0.00 / 3.00' in formatted.observation
+    assert '状态为存在问题' in formatted.observation
     assert 'special-functionBuild-report' not in formatted.observation
     assert '评估总结：特殊作业报备功能建设情况评估' in formatted.observation
     assert '特殊作业报备功能建设情况评估总结建议：' in formatted.observation
@@ -185,6 +186,8 @@ def test_single_dimension_item_summary_uses_item_name_only():
     })
     formatted = format_special_result('special_data_quality_evaluation', result)
     assert '评估总结：特殊作业数据完整性评估' in formatted.observation
+    assert '状态为数据不足' in formatted.observation
+    assert '数据不足（—）' not in formatted.observation
     assert '特殊作业数据质量模块' not in formatted.observation
     assert '1.1' not in formatted.observation
 

@@ -46,6 +46,16 @@ def test_old_summary_labels_are_normalized_to_module():
     assert text == "评估总结：特殊作业功能建设模块共核查3项。"
 
 
+def test_single_item_status_and_suggestions_are_normalized():
+    text = _normalize_answer_markup(
+        "特殊作业报备功能建设情况评估：0.00 / 3.00分，状态为数据不足（—）。\n"
+        "评估总结：暂无法完成评估。特殊作业功能建设模块总结建议： - 建议补齐数据。 - 建议重新评分。"
+    )
+    assert "状态为数据不足。" in text
+    assert "数据不足（—）" not in text
+    assert "\n\n特殊作业功能建设模块总结建议：\n- 建议补齐数据。\n- 建议重新评分。" in text
+
+
 def test_generic_table_supports_more_than_four_columns():
     table = _render_table_html([
         "| 一 | 二 | 三 | 四 | 五 | 六 |\n",

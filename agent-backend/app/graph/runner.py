@@ -247,6 +247,24 @@ def _normalize_answer_markup(text: str) -> str:
     value = value.replace("功能建设板块", "功能建设模块").replace("功能建设维度", "功能建设模块")
     value = value.replace("数据质量板块", "数据质量模块").replace("数据质量维度", "数据质量模块")
     value = value.replace("应用成效板块", "应用成效模块").replace("应用成效维度", "应用成效模块")
+    value = re.sub(
+        r"状态\s*(?:为|[:：])\s*数据不足\s*[（(]\s*[—-]\s*[）)]",
+        "状态为数据不足",
+        value,
+    )
+    # 总结建议必须单独成段，每条建议各占一行；修复模型压成同一行的情况。
+    value = re.sub(
+        r"[ \t]*(特殊作业(?:功能建设|数据质量|应用成效)模块总结建议：)[ \t]*",
+        r"\n\n\1\n",
+        value,
+    )
+    value = re.sub(r"[ \t]*[-•][ \t]*(?=建议)", "\n- ", value)
+    value = re.sub(
+        r"(特殊作业(?:功能建设|数据质量|应用成效)模块总结建议：)\n{2,}(?=- )",
+        r"\1\n",
+        value,
+    )
+    value = re.sub(r"\n{3,}", "\n\n", value)
     # 单项查询不向用户展示内部评分序号（例如 1.1、2.3）。
     value = re.sub(r"(?m)^\s*\d+(?:\.\d+)+[ \t]+", "", value)
     return re.sub(r"\*\*([^*\n]+)\*\*", r"\1", value)

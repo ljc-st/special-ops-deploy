@@ -294,6 +294,13 @@ def _status_text(status: object) -> str:
     return _STATUS_TEXT.get(str(status), str(status))
 
 
+def _prose_status_text(status: object) -> str:
+    """段落中直接写状态名称；横杠只用于评分表的状态列。"""
+    if str(status) in {"DATA_INSUFFICIENT", "数据不足", "—"}:
+        return "数据不足"
+    return _status_text(status)
+
+
 def _application_effect_note() -> str:
     return (
         '<div style="margin:6px 0 0;text-align:left;color:#99b7d9;'
@@ -411,8 +418,8 @@ def format_special_result(skill_name: str, result: ToolResult) -> ToolResult:
     }:
         data = _first_item(raw)
         item_name = _score_item_cell(data.get("itemNo"), data.get("itemName"))
-        state = _status_text(data.get("status"))
-        body = f"{item_name}：{_score_text(data)}，{state}"
+        state = _prose_status_text(data.get("status"))
+        body = f"{item_name}：{_score_text(data)}，状态为{state}"
         detail = _detail(data)
         if detail:
             body += f"\n原因：{detail}"
@@ -443,8 +450,8 @@ def format_special_result(skill_name: str, result: ToolResult) -> ToolResult:
             if data.get("singleItem"):
                 item = items[0]
                 item_name = _score_item_cell(item.get("itemNo"), item.get("itemName"))
-                state = _status_text(item.get("status"))
-                lines.append(f"{item_name}：{_score_text(item)}，{state}")
+                state = _prose_status_text(item.get("status"))
+                lines.append(f"{item_name}：{_score_text(item)}，状态为{state}")
                 lines.append(f"原因：{_detail(item)}")
                 lines.extend(["", *_single_item_summary(item_name, state)])
             elif len(items) >= 3:
@@ -456,7 +463,7 @@ def format_special_result(skill_name: str, result: ToolResult) -> ToolResult:
             else:
                 lines.insert(1, f"{label} {_ratio_text(dim.get('score', '-'), dim.get('maxScore', '-'), ' 分')}")
                 for index, it in enumerate(items, 1):
-                    state = _status_text(it.get("status"))
+                    state = _prose_status_text(it.get("status"))
                     lines.append(
                         f"- "
                         f"{_score_item_cell(it.get('itemNo'), it.get('itemName'))}："
@@ -479,9 +486,9 @@ def format_special_result(skill_name: str, result: ToolResult) -> ToolResult:
         data = _first_item(raw)
         if data:
             item_name = _score_item_cell(data.get("itemNo"), data.get("itemName"))
-            state = _status_text(data.get("status"))
+            state = _prose_status_text(data.get("status"))
             text = (
-                f"【特殊作业单项详情】\n{item_name}：{_score_text(data)}，{state}"
+                f"【特殊作业单项详情】\n{item_name}：{_score_text(data)}，状态为{state}"
                 f"\n原因：{_detail(data)}\n\n"
                 + "\n".join(_single_item_summary(item_name, state))
             )
