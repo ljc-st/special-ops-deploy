@@ -1,6 +1,8 @@
 """异步调用外部日志服务；日志失败不影响主问答链路。"""
 from __future__ import annotations
 
+import re
+
 import httpx
 
 
@@ -27,8 +29,43 @@ async def generate_visible_thought(llm, query: str) -> str:
     return thought_for_query(query)
 
 
+def _named_company(query: str) -> str:
+    """从常见问法中提取用户明确点名的公司，泛指企业不视为名称。"""
+    match = re.search(
+        r"(?:查询一下|查一下|查询|查查|查|看看|看一下|了解一下)\s*"
+        r"([^，。！？?\n]{1,60}?(?:有限公司|股份有限公司|集团有限公司|公司|企业))",
+        query.strip(),
+    )
+    if not match:
+        return ""
+    company = match.group(1).strip(" 的")
+    generic_words = ("哪些", "所有", "全部", "当前", "园区", "存在", "相关", "有问题", "评分问题")
+    if company in {"公司", "企业"} or any(word in company for word in generic_words):
+        return ""
+    return company
+
+
 def thought_for_query(query: str) -> str:
     """按用户关心的业务场景生成可展示的三步核查说明。"""
+    company = _named_company(query)
+    if company:
+        if any(word in query for word in ("作业票", "票号", "票据")):
+            return (
+                f"第一步：我先确认你要查看的是“{company}”相关的特殊作业票信息，并按企业名称锁定查询范围。\n"
+                "第二步：我会核对匹配企业及其现有作业票记录，重点查看作业票编号、评判结果和具体问题。\n"
+                "第三步：我会把查到的作业票逐条列清楚；如果没有相关记录或企业名称未匹配到，也会明确告诉你。"
+            )
+        if any(word in query for word in ("评分", "得分", "扣分", "问题", "特殊作业")):
+            return (
+                f"第一步：我先确认你要查看的是“{company}”相关的特殊作业评分或问题记录，并按企业名称查找。\n"
+                "第二步：我会核对匹配企业、本次评分项目、得分状态和问题原因，并查看是否关联具体作业票。\n"
+                "第三步：我会把该企业涉及的问题和依据整理清楚，方便你判断需要核查或整改的内容。"
+            )
+        return (
+            f"第一步：我先确认你要查询的是“{company}”的企业信息，并按这个名称查找匹配企业。\n"
+            "第二步：我会核对企业全称、企业简称、统一社会信用代码、生产状态和安全风险等级等现有资料。\n"
+            "第三步：我会把匹配结果清楚列出；如果存在同名或相近名称会分别展示，未查到也会明确说明。"
+        )
     if any(word in query for word in ("数据库", "历史", "批次", "入库记录", "历史记录", "企业信息")):
         return (
             "第一步：我先确认你想查看的是企业信息、历史评分、评估批次，还是作业票历史记录，并明确查询范围。\n"

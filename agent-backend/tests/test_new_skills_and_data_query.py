@@ -224,6 +224,28 @@ def test_work_ticket_function_build_is_not_mistaken_for_history_query():
     assert '历史评分' not in thought
 
 
+def test_named_company_thought_matches_company_lookup_question():
+    thought = thought_for_query('查一下红宝丽公司')
+    assert '“红宝丽公司”' in thought
+    assert '企业全称、企业简称、统一社会信用代码' in thought
+    assert '特殊作业整体评分' not in thought
+
+
+def test_named_company_thought_distinguishes_scores_and_tickets():
+    score_thought = thought_for_query('查询红宝丽公司的特殊作业扣分问题')
+    assert '“红宝丽公司”相关的特殊作业评分或问题记录' in score_thought
+    assert '得分状态和问题原因' in score_thought
+
+    ticket_thought = thought_for_query('查一下红宝丽公司的问题作业票')
+    assert '“红宝丽公司”相关的特殊作业票信息' in ticket_thought
+    assert '作业票编号、评判结果和具体问题' in ticket_thought
+
+
+def test_generic_company_question_does_not_invent_company_name():
+    thought = thought_for_query('查询存在评分问题的企业')
+    assert '“存在评分问题的企业”' not in thought
+
+
 def test_application_effect_penalty_rows_and_note_are_user_facing():
     result = ToolResult(True, '', raw={
         'dimensionCode': 'applicationEffect',
